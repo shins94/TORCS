@@ -143,24 +143,31 @@ double getAllowedSpeedFromCurvature(shared_use_st *shared, int index){
 	double mu = ASPHALT_FRICTION_CONSTANT;
 	double deltaAngle = 0.0;
 	double curvature = 0.0;
+	double deltadists = 0.0;
 
-	if (index == CURRENT_TRACK_INDEX)
-		deltaAngle = shared->track_forward_angles[0] - shared->track_current_angle;
-	else	
-		deltaAngle = shared->track_forward_angles[index + 1] - shared->track_forward_angles[index];
+	deltaAngle = shared->track_forward_angles[index + 1] - shared->track_forward_angles[index];
 	
 	NORM_PI_PI(deltaAngle);
 
-	if (index == CURRENT_TRACK_INDEX)
-		curvature = (deltaAngle) / (shared->track_forward_dists[0] - shared->toStart);
-	else	
-		curvature = (deltaAngle) / (shared->track_forward_dists[index + 1] - shared->track_forward_dists[index]);
+	deltadists = (shared->track_forward_dists[index + 1] - shared->track_forward_dists[index]);
+
+	if ((deltadists < 0) && (index - 1 >= 0)) {
+		deltadists = (shared->track_forward_dists[index] - shared->track_forward_dists[index-1]);
+	}
+	else if ((deltadists < 0) && (index - 1 < 0)) {
+		deltadists = (shared->track_forward_dists[index+2] - shared->track_forward_dists[index+1]);
+	}
+
+	curvature = (deltaAngle) / (shared->track_forward_dists[index + 1] - shared->track_forward_dists[index]);
 
 	curvature = fabs(curvature);
 		
-	if (fp)
-		fprintf(fp, "%f, %f\n", shared->track_forward_dists[index], curvature);
-
+	if (fp) {
+	//	fprintf(fp, "%f, %f\n", shared->track_forward_dists[index], curvature);
+		//fprintf(fp, "%f, %f\n", shared->track_forward_dists[index], curvature);
+	//	fprintf(fp, "deltadists = %f \n", deltadists);
+		//fprintf(fp, " deltadists = %f \n", deltadists);
+	}
 	if (curvature == 0.0)
 		calcSpeed = FLT_MAX;
 
@@ -262,6 +269,9 @@ double getBrake(shared_use_st *shared)
 #if 1
 	while (lookaheaddist < maxlookaheaddist) {
 		
+		if (trackIndex > 18)
+			break;
+
 		allowedspeed = getAllowedSpeedFromCurvature(shared, trackIndex);
 
 		if (allowedspeed < shared->speed) {
@@ -291,7 +301,10 @@ int controlDriving(shared_use_st *shared){
 
 	//double allowspeed = getAllowedSpeed(shared);
 	//double allowspeed  = calculateCurvature(shared);
-
+	/*
+	for (int i = 0; i < 18; i++) {
+		fprintf(fp, "%d, %f, %f, %f\n", i, shared->track_forward_dists[i], shared->track_forward_dists[i + 1], shared->track_forward_dists[i + 1] - shared->track_forward_dists[i]);
+	}*/
 	//printf("allowspeed = %f\n", allowspeed);
 	getDistToSegEnd(shared);
 
