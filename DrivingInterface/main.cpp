@@ -235,7 +235,6 @@ float filterABS(shared_use_st *shared,float brake)
 	slip += car->_wheelSpinVel(i) * car->_wheelRadius(i) / shared->speed;
 	}
 	*/
-
 	slip = MAX_SPEED_PER_METER / shared->speed;
 
 	slip = slip / 2.0;
@@ -261,8 +260,9 @@ double getBrake(shared_use_st *shared)
 #if 1
 
 	if (allowedspeed < shared->speed){
-		printf("allowedspeed < shared->speed  allowSpeed = %f speed = %f \n", allowedspeed,shared->speed);
-		return 1.0;
+		//printf("allowedspeed < shared->speed  allowSpeed = %f speed = %f \n", allowedspeed,shared->speed);
+		return min(1.0f, (shared->speed - allowedspeed) / (3.0));
+		//return 1.0;
 	}
 #endif
 	int trackIndex = 0;
@@ -279,8 +279,8 @@ double getBrake(shared_use_st *shared)
 			float brakedist = (currentspeedsqr - allowedspeedsqr) / (2.0*(mu*GRAVITY_CONSTANT));// +allowedspeedsqr*(CA*mu + CW)));
 
 			if (brakedist > lookaheaddist) {
-				printf("break \n");
-				return 1.0;
+				return min(1.0f, (shared->speed - allowedspeed) / (3.0));
+				//return 1.0;
 			}
 
 		}
