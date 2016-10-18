@@ -32,7 +32,9 @@
      while ((x) > M_PI) { (x) -= 2*M_PI; }   \
         while ((x) < -M_PI) { (x) += 2*M_PI; }  \
    } while (0)
-
+ 
+#define RADIANS_TO_DEGREES(radians) ((radians) * (180.0 / M_PI))
+ 
 FILE *fp;
 
 struct shared_use_st
@@ -74,16 +76,19 @@ struct shared_use_st
 };
 
 static int stuck = 0;
-const double MAX_UNSTUCK_SPEED = 10.0;   /* [m/s] */
+const double MAX_UNSTUCK_SPEED = 5.0;   /* [m/s] */
 const double MIN_UNSTUCK_DIST = 3.0;    /* [m] */
 const double MAX_UNSTUCK_ANGLE = 15.0 / 180.0*M_PI;
-const double MAX_UNSTUCK_COUNT = 100.0;
+const double MAX_UNSTUCK_COUNT = 20.0;
 
+
+
+#if 1
 /* check if the car is stuck */
 bool isStuck(shared_use_st *shared)
 {
 	float angle = shared->angle;
-//	NORM_PI_PI(angle);
+	NORM_PI_PI(angle);
 
 	//printf("shared->speed = %f \n", shared->speed);
 	// angle smaller than 30 degrees?
@@ -92,15 +97,16 @@ bool isStuck(shared_use_st *shared)
 		fabs(shared->toMiddle) > MIN_UNSTUCK_DIST) {
 
 		if (stuck > MAX_UNSTUCK_COUNT && shared->toMiddle*angle < 0.0) {
-			printf("stuck\n");
+			//printf("stuck\n");
 			return true;
 		}
 		else {
 
-			printf("stuck count is %d\n", stuck);
+			//printf("stuck count is %d\n", stuck);
 			stuck++;
 			return false;
-		}
+		} 
+
 	}	else {
 //		printf("angle = %f\n", fabs(shared->angle));
 //		printf("speed = %f\n km/h", shared->speed*3.6);
@@ -110,7 +116,7 @@ bool isStuck(shared_use_st *shared)
 		return false;
 	}
 }
-
+#endif
 inline int sign(double x) {
 	return (x > 0) ? 1 : ((x < 0) ? -1 : 0);
 }
@@ -161,7 +167,7 @@ double getAllowedSpeedFromCurvature(shared_use_st *shared, int index){
 	curvature = (deltaAngle) / (shared->track_forward_dists[index + 1] - shared->track_forward_dists[index]);
 
 	curvature = fabs(curvature);
-		
+
 	if (fp) {
 	//	fprintf(fp, "%f, %f\n", shared->track_forward_dists[index], curvature);
 		//fprintf(fp, "%f, %f\n", shared->track_forward_dists[index], curvature);
@@ -242,7 +248,7 @@ float filterABS(shared_use_st *shared,float brake)
 	if (slip < ABS_SLIP)
 		brake = brake*slip;
 
-	printf("brake = %f", brake);
+	//printf("brake = %f", brake);
 
 	return brake;
 }
@@ -291,7 +297,106 @@ double getBrake(shared_use_st *shared)
 #endif
 	return 0.0;
 }
+ 
+ 
+const float WIDTHDIV = 4.0;                         /* [-] */
+ 
+/* Hold car on the track */
+double filterTrk(shared_use_st *shared, double accel)
+{
+    double diffangle = shared->track_forward_angles[0] - shared->track_current_angle;
+ 
+    int TrackType = CURVE_TYPE_STRAIGHT;
+ 
+    NORM_PI_PI(diffangle);
+ 
+    if (fabs(diffangle) <= DBL_EPSILON)
+		TrackType = CURVE_TYPE_STRAIGHT;
+    else if (diffangle < 0)
+        TrackType = CURVE_TYPE_RIGHT;
+    else if (diffangle > 0)
+        TrackType = CURVE_TYPE_LEFT;
+ 
+    if (shared->speed < MAX_UNSTUCK_SPEED) return accel;
+ 
+    if (TrackType == CURVE_TYPE_STRAIGHT) {
+		double tm = fabs(shared->toMiddle);
+		double w = shared->track_width / WIDTHDIV;
+        if (tm > w) 
+            return 0.0;
+        else
+            return accel;
+    }
+    else {
+		double sign = (TrackType == CURVE_TYPE_RIGHT) ? -1 : 1;
+        if (shared->toMiddle*sign > 0.0) {
+            return accel;
+        }
+        else {
+			double tm = fabs(shared->toMiddle);
+			double w = shared->track_width / WIDTHDIV;
+            if (tm > w) 
+                return 0.0; 
+            else
+                return accel;
+        }
+    }
+}
+ 
+bool isOutofTrack(shared_use_st *shared) {
+ 
+    // angle smaller than 30 degrees?
+    if (fabs(shared->toMiddle) > (shared->track_width/2)) {
+     
+        return true;
+     
+    }
+    return false;
+}
+ 
+const float LOOKAHEAD_CONST = 17.0;                 /* [m] */
+const float LOOKAHEAD_FACTOR = 0.33;                /* [-] */
 
+/* compute target point for steering */
+double getTargetPoint(shared_use_st *shared)
+{
+	  double lookahead = LOOKAHEAD_CONST + shared->speed*LOOKAHEAD_FACTOR;
+	  double length = getDistToSegEnd(shared);
+	  int index = 0;
+	  while (length < lookahead) {
+      
+		  length += shared->track_forward_dists[index + 1] - shared->track_forward_dists[index];
+		  index++;
+
+		  if (index > 17)
+			  break;
+	  }
+	  	  
+	  printf("index = %d\n",index);
+
+	  return shared->track_forward_angles[index];
+}
+
+double getSteer(shared_use_st *shared)
+{
+	double targetAngle;
+	targetAngle = getTargetPoint(shared);
+	printf("targetAngle = %f\n", targetAngle);
+	targetAngle  -= shared->track_current_angle - shared->angle;
+	printf("shared->track_current_angle + shared->angle = %f\n", shared->track_current_angle + shared->angle);
+	NORM_PI_PI(targetAngle);
+	targetAngle -= 1.0*shared->toMiddle / shared->track_width;
+	printf("targetAngle = %f\n", targetAngle);
+	double steer = targetAngle / ((21 * M_PI) / 180);
+
+	printf("steer = %f\n", steer);
+	return steer;
+}
+
+
+ 
+static bool Switch = true;
+ 
 int controlDriving(shared_use_st *shared){
 	if (shared == NULL) return -1;
 
@@ -310,32 +415,49 @@ int controlDriving(shared_use_st *shared){
 
 	if (isStuck(shared)) {
 	diff_angle = -shared->angle;
-	NORM_PI_PI(diff_angle);
+	//NORM_PI_PI(diff_angle);
 
 	//Output : 4개의 Output Cmd 값을 도출하세요.
-	shared->steerCmd = diff_angle / ((21*M_PI)/180);
-	shared->accelCmd = 0.5;
+	shared->steerCmd = diff_angle / ((21 * M_PI) / 180);
+	shared->accelCmd = 0.3;
 	shared->brakeCmd = 0.0;
 	shared->backwardCmd = GEAR_BACKWARD;
 
 	}
+#if 1
+    else if (isOutofTrack(shared)){
+        diff_angle = shared->angle;
+        //TO-DO : 알고리즘을 작성하세요.
+        diff_angle -= SC*shared->toMiddle / shared->track_width;
+		NORM_PI_PI(diff_angle);
+
+        //Output : 4개의 Output Cmd 값을 도출하세요.
+        shared->steerCmd = diff_angle / ((21 * M_PI) / 180);
+        shared->brakeCmd = 0.0;
+        shared->accelCmd = 0.2; 
+        shared->backwardCmd = GEAR_FORWARD;
+ 
+        printf("isOutofTrack\n");
+ 
+        Switch = false;
+    }
+#endif  
 	else {
-	diff_angle = shared->angle;
-	//TO-DO : 알고리즘을 작성하세요.
-	NORM_PI_PI(diff_angle);
-	diff_angle -= SC*shared->toMiddle / shared->track_width;
+		diff_angle = shared->angle;
+		//TO-DO : 알고리즘을 작성하세요.
+		diff_angle -= SC*shared->toMiddle / shared->track_width;
+		NORM_PI_PI(diff_angle);
+		
+		printf("diff_angle = %f\n",RADIANS_TO_DEGREES(diff_angle));
 
-	//Output : 4개의 Output Cmd 값을 도출하세요.
-	shared->steerCmd = diff_angle / ((21 * M_PI) / 180);
-	shared->brakeCmd = filterABS(shared,getBrake(shared));
-	if (shared->brakeCmd == 0.0)
-		shared->accelCmd = getaccel(shared);
-	else 
-		shared->accelCmd = 0.0;
-	shared->backwardCmd = GEAR_FORWARD;
-
-
-
+		//Output : 4개의 Output Cmd 값을 도출하세요.
+		shared->steerCmd = diff_angle / ((21 * M_PI) / 180);// getSteer(shared);// diff_angle / ((21 * M_PI) / 180);
+		shared->brakeCmd = filterABS(shared,getBrake(shared));
+		if (shared->brakeCmd == 0.0)
+			shared->accelCmd = filterTrk(shared, getaccel(shared));
+		else 
+			shared->accelCmd = 0.0;
+		shared->backwardCmd = GEAR_FORWARD;
 
 	}
 
