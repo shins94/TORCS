@@ -80,6 +80,9 @@ const double MIN_UNSTUCK_DIST = 3.0;    /* [m] */
 const double MAX_UNSTUCK_ANGLE = 15.0 / 180.0*M_PI;
 const double MAX_UNSTUCK_COUNT = 20.0;
 
+const float ABS_SLIP = 0.9;                         /* [-] range [0.95..0.3] */
+const float ABS_MINSPEED = 3.0;
+#define MAX_SPEED_PER_METER  100.0
 
 
 #if 1
@@ -154,6 +157,10 @@ double getAllowedSpeedFromCurvature(shared_use_st *shared, int index){
 
 	deltaAngle = shared->track_forward_angles[index + 1] - shared->track_forward_angles[index];
 
+	if (deltaAngle < 0)
+		printf("bug\n");
+
+
 	NORM_PI_PI(deltaAngle);
 
 	deltadists = (shared->track_forward_dists[index + 1] - shared->track_forward_dists[index]);
@@ -176,18 +183,18 @@ double getAllowedSpeedFromCurvature(shared_use_st *shared, int index){
 		//fprintf(fp, " deltadists = %f \n", deltadists);
 	}
 	if (curvature == 0.0)
-		calcSpeed = FLT_MAX;
+		calcSpeed = MAX_SPEED_PER_METER;
 
 	else {
 
 		calcSpeed = sqrt((mu*1.5*GRAVITY_CONSTANT) / curvature);
 
 		if (isinf(calcSpeed)) {
-			calcSpeed = FLT_MAX;
+			calcSpeed = MAX_SPEED_PER_METER;
 		}
 
 		if (isnan(calcSpeed)) {
-			calcSpeed = FLT_MAX;
+			calcSpeed = MAX_SPEED_PER_METER;
 		}
 	}
 
@@ -204,13 +211,16 @@ double getaccel(shared_use_st *shared)
 	}
 	*/
 	printf("allowedspeed = %f km/h speed = %f km/h \n", allowedspeed * (18 / 5), shared->speed* (18 / 5));
-
-	if (allowedspeed > shared->speed) {
-		return 1.0;
+	/*
+	if (allowedspeed > shared->speed + 1.0) {
+		return 3.0;
 	}
 	else {
-		return allowedspeed / 70.0;
-	}
+		return 0.2;
+	}*/
+
+	return allowedspeed / shared->speed;
+
 }
 
 double getDistToSegEnd(shared_use_st *shared)
@@ -231,9 +241,6 @@ double getDistToSegEnd(shared_use_st *shared)
 	*/
 }
 
-const float ABS_SLIP = 0.9;                         /* [-] range [0.95..0.3] */
-const float ABS_MINSPEED = 3.0;
-#define MAX_SPEED_PER_METER  70.0
 
 /* Antilocking filter for brakes */
 float filterABS(shared_use_st *shared, float brake)
@@ -252,6 +259,7 @@ float filterABS(shared_use_st *shared, float brake)
 
 	if (slip < ABS_SLIP)
 		brake = brake*slip;
+
 
 	//printf("brake = %f", brake);
 
@@ -304,7 +312,7 @@ double getBrake(shared_use_st *shared)
 }
 
 
-const float WIDTHDIV = 3.0;                         /* [-] */
+const float WIDTHDIV = 4.0;                         /* [-] */
 
 /* Hold car on the track */
 double filterTrk(shared_use_st *shared, double accel)
@@ -326,7 +334,8 @@ double filterTrk(shared_use_st *shared, double accel)
 
 	if (TrackType == CURVE_TYPE_STRAIGHT) {
 		double tm = fabs(shared->toMiddle);
-		double w = shared->track_width / WIDTHDIV;
+		double w = (shared->track_width - 4.39) / 2;
+		
 		if (tm > w)
 			return 0.0;
 		else
@@ -354,7 +363,11 @@ bool isOutofTrack(shared_use_st *shared) {
 	if (fabs(shared->toMiddle) > (shared->track_width / 2)) {
 		return true;
 	}
-	if (fabs(shared->angle) > (M_PI / 2))  {
+
+	double angle = fabs(shared->angle);
+	NORM_PI_PI(angle);
+
+	if (angle > (M_PI / 2))  {
 		return true;
 	}
 
@@ -399,8 +412,6 @@ double getSteer(shared_use_st *shared)
 	printf("steer = %f\n", steer);
 	return steer;
 }
-
-
 
 static bool trytoOut = false;
 
@@ -492,7 +503,10 @@ int controlDriving(shared_use_st *shared){
 
 	}
 
-
+//	if ((shared->toStart > 1800) && (shared->toStart < 1900))
+		//shared->accelCmd = 0.2;
+	
+	printf("toStart = %f, accelCmd = %f\n", shared->toStart, shared->accelCmd);
 
 	fprintf(fp, "%f, %f\n", shared->toStart, shared->accelCmd);
 
@@ -550,7 +564,7 @@ int main(int argc, char **argv){
 	}
 	printf("\n********** Memory sharing started, attached at %X **********\n", shared);
 
-	fp = fopen("C:\\Users\\SHINS94\\Downloads\\temp\\1.dat", "wt");//"wt");
+	fp = fopen("C:\\Users\\shins\\Downloads\\temp\\1.dat", "wt");//"wt");
 
 	////////////////////// DON'T TOUCH IT - Default Setting
 	shared->connected = true;
