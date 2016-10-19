@@ -115,6 +115,7 @@ bool isStuck(shared_use_st *shared)
 		stuck = 0;
 		return false;
 	}
+
 }
 #endif
 inline int sign(double x) {
