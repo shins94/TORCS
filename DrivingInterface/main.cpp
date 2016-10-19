@@ -349,8 +349,11 @@ bool isOutofTrack(shared_use_st *shared) {
     if (fabs(shared->toMiddle) > (shared->track_width/2)) {
      
         return true;
-     
     }
+	if (fabs(shared->angle) > (M_PI/2))  {
+		return true;
+	}
+
     return false;
 }
  
