@@ -192,10 +192,9 @@ double getAllowedCurvature(shared_use_st *shared, int index){
 			deltadists = (shared->track_forward_dists[index + 2] - shared->track_forward_dists[index + 1]);
 		}
 	}
+
 	curvature = (deltaAngle) / deltadists;
-
-
-
+	
 	curvature = fabs(curvature);
 
 	return curvature;
@@ -319,16 +318,17 @@ double getaccel(shared_use_st *shared)
 	double allowedspeed = getAllowedSpeedFromCurvature(shared, 0);
 	//printf("allowedspeed = %f km/h speed = %f km/h \n", allowedspeed * (18 / 5), shared->speed* (18 / 5));
 
-	if (allowedspeed > shared->speed + 1.0) {
-			double curvature = pLearn->getLastCurvature();
+	if (allowedspeed > shared->speed + (20*(18/5))) {
+//			double curvature = pLearn->getLastCurvature();
 			
-			if (curvature < 0.0001) {
-				
-				return 1.0;
-			}
-			
+			return 1.0;
+
+//			if (curvature < 0.0001) {
+				//return 1.0;
+			//}
+#if 0			
 			else {
-				/*
+				
 				double calcSpeed = sqrt((ASPHALT_FRICTION_CONSTANT*1.5*GRAVITY_CONSTANT) / curvature);
 
 				if (curvature == 0.0)
@@ -346,10 +346,9 @@ double getaccel(shared_use_st *shared)
 				double rm = 850;
 				double accel = calcSpeed / radius*gr / rm;
 				//	printf("cur accel = %f\n", accel);
-				*/
-				return 0.3;
+				return accel;
 			}
-
+#endif
 	}
 	else {
 
@@ -403,7 +402,7 @@ double getDistToSegEnd(shared_use_st *shared)
 	}
 	*/
 }
-
+#if 1
 /* compute fitting acceleration */
 double getaccel(shared_use_st *shared)
 {
@@ -412,6 +411,10 @@ double getaccel(shared_use_st *shared)
 	}
 	*/
 	double allowedspeed = getAllowedSpeedFromCurvature(shared, 0);
+	
+	if (allowedspeed == MAX_SPEED_PER_METER)
+		return 1.0;
+	
 	double mu = ASPHALT_FRICTION_CONSTANT;
 	double currentspeedsqr = shared->speed*shared->speed;
 	double maxlookaheaddist = currentspeedsqr / (2.0*mu*GRAVITY_CONSTANT);
@@ -422,8 +425,14 @@ double getaccel(shared_use_st *shared)
 	while (lookaheaddist < maxlookaheaddist) {
 		float pallowedspeed = getAllowedSpeedFromCurvature(shared, index);
 
-		if (pallowedspeed < allowedspeed) {
-			allowedspeed = pallowedspeed;
+		double allowedspeedsqr = allowedspeed*allowedspeed;
+		double brakedist = (currentspeedsqr - allowedspeedsqr) / (2.0*(mu*GRAVITY_CONSTANT));// +allowedspeedsqr*(CA*mu + CW)));
+
+		if (brakedist < lookaheaddist) {
+
+			if (pallowedspeed < allowedspeed) {
+				allowedspeed = pallowedspeed;
+			}
 		}
 		
 		lookaheaddist += getTrackLength(shared, index);
@@ -434,7 +443,7 @@ double getaccel(shared_use_st *shared)
 	double delta =  allowedspeed - (shared->speed + 3.0);
 	double alpha = 0.5;
 	double lambda = 2.0;
-	/*
+	
 	if (delta>0) {
 		if (delta<lambda) {
 			float acc = alpha + (1 - alpha)*delta / lambda;
@@ -451,8 +460,8 @@ double getaccel(shared_use_st *shared)
 		//printf ("at:%f\n", acc);
 		return acc;
 	}
-	*/
-#if 1	
+	
+#if 0
 	if (allowedspeed > shared->speed + 30*(18/5)) {
 		double curvature = pLearn->getLastCurvature();
 		return 1.0;
@@ -469,7 +478,7 @@ double getaccel(shared_use_st *shared)
 #endif
 
 }
-
+#endif
 
 /* Antilocking filter for brakes */
 double filterABS(shared_use_st *shared, double brake)
