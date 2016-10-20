@@ -4,10 +4,14 @@
 #define _USE_MATH_DEFINES 
 #include <math.h>
 //#include "pGNUPlot.h"
-
+#include <time.h>
 #include <Windows.h>
 #include "linalg.h"
 #include "float.h"
+#include "learn.h"
+
+
+FILE *fp;
 
 #define SHARED_MOMORY_NAME1 "TORCS_SHARED1"
 #define SHARED_MOMORY_NAME2 "TORCS_SHARED2"
@@ -34,7 +38,7 @@
 
 #define RADIANS_TO_DEGREES(radians) ((radians) * (180.0 / M_PI))
 
-FILE *fp;
+
 
 struct shared_use_st
 {
@@ -74,14 +78,16 @@ struct shared_use_st
 	int    backwardCmd;
 };
 
+learn *pLearn = NULL;
+
 static int stuck = 0;
 const double MAX_UNSTUCK_SPEED = 5.0;   /* [m/s] */
 const double MIN_UNSTUCK_DIST = 3.0;    /* [m] */
 const double MAX_UNSTUCK_ANGLE = 15.0 / 180.0*M_PI;
 const double MAX_UNSTUCK_COUNT = 20.0;
 
-const float ABS_SLIP = 0.9;                         /* [-] range [0.95..0.3] */
-const float ABS_MINSPEED = 3.0;
+const double ABS_SLIP = 0.9;                         /* [-] range [0.95..0.3] */
+const double ABS_MINSPEED = 3.0;
 #define MAX_SPEED_PER_METER  100.0
 
 
@@ -89,7 +95,7 @@ const float ABS_MINSPEED = 3.0;
 /* check if the car is stuck */
 bool isStuck(shared_use_st *shared)
 {
-	float angle = shared->angle;
+	double angle = shared->angle;
 	NORM_PI_PI(angle);
 
 	//printf("shared->speed = %f \n", shared->speed);
@@ -126,13 +132,13 @@ inline int sign(double x) {
 }
 //
 ///* Compute the allowed speed on a segment */
-//float getAllowedSpeed(shared_use_st *shared)
+//double getAllowedSpeed(shared_use_st *shared)
 //{
 //  if (shared->track_curve_type == CURVE_TYPE_STRAIGHT) {
 //      return FLT_MAX;
 //  }
 //  else {
-//      float mu = 1.2;
+//      double mu = 1.2;
 //      return sqrt(mu*9.8*shared->track_width);
 //  }
 //}
@@ -141,87 +147,233 @@ inline int sign(double x) {
 #define CURRENT_TRACK_INDEX -1
 
 double getTrackLength(shared_use_st *shared, int index){
-	float length = shared->track_forward_dists[index + 1] - shared->track_forward_dists[index];
+	double length = shared->track_forward_dists[index + 1] - shared->track_forward_dists[index];
 	return length;
 }
-
-double getAllowedSpeedFromCurvature(shared_use_st *shared, int index){
-
+double getAllowedCurvature(shared_use_st *shared, int index){
+	
 	double first = 0.0;
-	double AllowSpeed = FLT_MAX;
+	double AllowSpeed = DBL_MAX;
 	double calcSpeed;
-	double mu = ASPHALT_FRICTION_CONSTANT;
+	
 	double deltaAngle = 0.0;
 	double curvature = 0.0;
 	double deltadists = 0.0;
 
-	deltaAngle = shared->track_forward_angles[index + 1] - shared->track_forward_angles[index];
+	if (index == -1) {
 
-	if (deltaAngle < 0)
-		printf("bug\n");
+		deltaAngle = shared->track_forward_angles[0] - shared->track_current_angle;
+	}
+	else {
 
+		deltaAngle = shared->track_forward_angles[index + 1] - shared->track_forward_angles[index];
+	}
+
+	/*
+	if (deltaAngle < 0) {
+	printf("bug\n");
+	}*/
 
 	NORM_PI_PI(deltaAngle);
 
-	deltadists = (shared->track_forward_dists[index + 1] - shared->track_forward_dists[index]);
-
-	if ((deltadists < 0) && (index - 1 >= 0)) {
-		deltadists = (shared->track_forward_dists[index] - shared->track_forward_dists[index - 1]);
+	if (index == -1) {
+		if (shared->track_forward_dists[0] == 0.0)
+			deltadists = shared->dist_track - shared->toStart;
+		else
+			deltadists = (shared->track_forward_dists[0] - shared->toStart);
 	}
-	else if ((deltadists < 0) && (index - 1 < 0)) {
-		deltadists = (shared->track_forward_dists[index + 2] - shared->track_forward_dists[index + 1]);
-	}
+	else {
+		deltadists = (shared->track_forward_dists[index + 1] - shared->track_forward_dists[index]);
 
-	curvature = (deltaAngle) / (shared->track_forward_dists[index + 1] - shared->track_forward_dists[index]);
+		if ((deltadists < 0) && (index - 1 >= 0)) {
+			deltadists = (shared->track_forward_dists[index] - shared->track_forward_dists[index - 1]);
+		}
+		else if ((deltadists < 0) && (index - 1 < 0)) {
+			deltadists = (shared->track_forward_dists[index + 2] - shared->track_forward_dists[index + 1]);
+		}
+	}
+	curvature = (deltaAngle) / deltadists;
+
+
 
 	curvature = fabs(curvature);
 
-	if (fp) {
-		//  fprintf(fp, "%f, %f\n", shared->track_forward_dists[index], curvature);
-		//fprintf(fp, "%f, %f\n", shared->track_forward_dists[index], curvature);
-		//  fprintf(fp, "deltadists = %f \n", deltadists);
-		//fprintf(fp, " deltadists = %f \n", deltadists);
-	}
+	return curvature;
+}
+double getAllowedSpeedFromCurvature(shared_use_st *shared, int index){
+	double mu = ASPHALT_FRICTION_CONSTANT;
+	double curvature = getAllowedCurvature(shared, index);
+
+	double calcSpeed = sqrt((mu*1.5*GRAVITY_CONSTANT) / curvature);
+	
 	if (curvature == 0.0)
+		return MAX_SPEED_PER_METER;
+
+	if (isinf(calcSpeed)) {
 		calcSpeed = MAX_SPEED_PER_METER;
+	}
 
-	else {
-
-		calcSpeed = sqrt((mu*1.5*GRAVITY_CONSTANT) / curvature);
-
-		if (isinf(calcSpeed)) {
-			calcSpeed = MAX_SPEED_PER_METER;
-		}
-
-		if (isnan(calcSpeed)) {
-			calcSpeed = MAX_SPEED_PER_METER;
-		}
+	if (isnan(calcSpeed)) {
+		calcSpeed = MAX_SPEED_PER_METER;
 	}
 
 	return calcSpeed;
 }
 
+
+DWORD previousTime;
+double speedIPrev;
+double speederrorPrev;
+double times;
+double speedK = 0.2;
+double speedTr = 0.15;
+double speedTd = 0.0;
+double deltaTime = 0.0;
+
+double getPidAccel(shared_use_st *shared, double targetspeed) {
+
+	double speedError = targetspeed - shared->speed;
+	double speedP = speedError * speedK;
+	
+	double speedI = speedIPrev + (((speedK*deltaTime) / (2 * speedTr))*(speedError));
+
+	if (speedI > 2){
+		speedI = 2;
+	}
+
+	if (speedI < -2){
+		speedI = -2;
+	}
+
+	double speedD = (((speedK*speedTd) / deltaTime)*(speedError - speederrorPrev));
+
+	speederrorPrev = speedError;
+	speedIPrev = speedI;
+	double accel = speedP + speedI + speedD;
+	
+	fprintf(fp, "%f, %f, %f, %f \n",deltaTime,targetspeed,shared->speed, accel);
+
+	if (accel > 1) accel = 1;
+	if (accel < 0) accel = 0;
+//	if ((accel > 0)&& (accel < 1)) accel = accel;
+	
+	printf("toStart = %f, accel = %f\n", shared->toStart, accel);
+	return accel;
+}
+
+int gear;
+
+int getCurgear() {
+	return gear;
+}
+const double ratio[] = {
+	-4.0, 3.5, 2.6, 1.9, 1.54, 1.25, 1.05
+};
+double getCurgearRaitio(int getr) {
+	return ratio[gear];
+}
+
+double getEmulatedGearRatio(double curSpeed) {
+	
+	double selratio = 0;
+	
+	if ((curSpeed*(18 / 5)) >= 0 && (curSpeed*(18 / 5)) < 79) {
+		selratio = ratio[1];
+		gear = 1;
+	}
+	if ((curSpeed*(18 / 5)) > 79 && (curSpeed*(18 / 5)) < 105) {
+		selratio = ratio[2];
+		gear = 2;
+	}
+	if ((curSpeed*(18 / 5)) > 105 && (curSpeed*(18 / 5)) < 134) {
+		selratio = ratio[3];
+		gear = 3;
+	}
+	if ((curSpeed*(18 / 5)) > 134 && (curSpeed*(18 / 5)) < 178) {
+		selratio = ratio[4];
+		gear = 4;
+	}
+	if ((curSpeed*(18 / 5)) > 178 && (curSpeed*(18 / 5)) < 210) {
+		selratio = ratio[5];
+		gear = 5;
+	}
+	if ((curSpeed*(18 / 5)) > 210) {
+		gear = 6;
+		selratio = ratio[6];
+	}
+	printf("cur gear = %d\n", gear);
+	return selratio;
+}
+
+#if 0
 ///* compute fitting acceleration */
 double getaccel(shared_use_st *shared)
 {
-	double allowedspeed = getAllowedSpeedFromCurvature(shared, 0);
-
 	/*  if ((shared->toStart  > 2760) && (shared->toStart  < 2770)) {
 	return 0.5;
 	}
 	*/
-	printf("allowedspeed = %f km/h speed = %f km/h \n", allowedspeed * (18 / 5), shared->speed* (18 / 5));
-	/*
+
+	const double radius = 0.33 / 2.0f + 0.133 * 0.8;
+	
+	double allowedspeed = getAllowedSpeedFromCurvature(shared, 0);
+	//printf("allowedspeed = %f km/h speed = %f km/h \n", allowedspeed * (18 / 5), shared->speed* (18 / 5));
+
 	if (allowedspeed > shared->speed + 1.0) {
-		return 3.0;
+			double curvature = pLearn->getLastCurvature();
+			
+			if (curvature < 0.0001) {
+				
+				return 1.0;
+			}
+			
+			else {
+				/*
+				double calcSpeed = sqrt((ASPHALT_FRICTION_CONSTANT*1.5*GRAVITY_CONSTANT) / curvature);
+
+				if (curvature == 0.0)
+					return MAX_SPEED_PER_METER;
+
+				if (isinf(calcSpeed)) {
+					calcSpeed = MAX_SPEED_PER_METER;
+				}
+
+				if (isnan(calcSpeed)) {
+					calcSpeed = MAX_SPEED_PER_METER;
+				}
+
+				double gr = getEmulatedGearRatio(shared->speed);
+				double rm = 850;
+				double accel = calcSpeed / radius*gr / rm;
+				//	printf("cur accel = %f\n", accel);
+				*/
+				return 0.3;
+			}
+
 	}
 	else {
-		return 0.2;
-	}*/
 
-	return allowedspeed / shared->speed;
+		double gr = getEmulatedGearRatio(shared->speed);
+		double rm = 850;
+		double accel = allowedspeed / radius*gr / rm;
+	//	printf("cur accel = %f\n", accel);
+		return accel;
+	}
+	
+	return 1.0;
+	
+	/*
+	if (allowedspeed * (18 / 5) < 70) {
+		return 0.3f;
+	}
+	*/
+
+	//return getPidAccel(shared, allowedspeed);
+	//return fabs (allowedspeed - shared->speed) / MAX_SPEED_PER_METER;
+	//}
 
 }
+#endif
 
 double getDistToSegEnd(shared_use_st *shared)
 {
@@ -229,7 +381,18 @@ double getDistToSegEnd(shared_use_st *shared)
 	/*  printf("shared->toStart = %f\n ", shared->toStart);
 	printf("shared->track_forward_dists[0] = %f\n", shared->track_forward_dists[0]);
 	*/
-	return shared->track_forward_dists[0] - shared->toStart;
+	double disttrack = shared->dist_track;
+	double real = shared->toStart > shared->dist_track;
+
+
+	//printf("track_forward_dists[0] = %f toStart = %f \n ", shared->track_forward_dists[0], shared->toStart, disttrack);
+
+	if (shared->track_forward_dists[0] == 0.0)
+		return shared->dist_track - shared->toStart;
+
+	return shared->track_forward_dists[0] - shared->toStart;// % shared->dist_track);
+
+
 
 	/*
 	if (car->_trkPos.seg->type == TR_STR) {
@@ -241,13 +404,79 @@ double getDistToSegEnd(shared_use_st *shared)
 	*/
 }
 
+/* compute fitting acceleration */
+double getaccel(shared_use_st *shared)
+{
+	/*  if ((shared->toStart  > 2760) && (shared->toStart  < 2770)) {
+	return 0.5;
+	}
+	*/
+	double allowedspeed = getAllowedSpeedFromCurvature(shared, 0);
+	double mu = ASPHALT_FRICTION_CONSTANT;
+	double currentspeedsqr = shared->speed*shared->speed;
+	double maxlookaheaddist = currentspeedsqr / (2.0*mu*GRAVITY_CONSTANT);
+	double lookaheaddist = getDistToSegEnd(shared);
+
+	int index = 1;
+	
+	while (lookaheaddist < maxlookaheaddist) {
+		float pallowedspeed = getAllowedSpeedFromCurvature(shared, index);
+
+		if (pallowedspeed < allowedspeed) {
+			allowedspeed = pallowedspeed;
+		}
+		
+		lookaheaddist += getTrackLength(shared, index);
+		index++;
+	}
+
+	//printf("allowedspeed = %f km/h speed = %f km/h \n", allowedspeed * (18 / 5), shared->speed* (18 / 5));
+	double delta =  allowedspeed - (shared->speed + 3.0);
+	double alpha = 0.5;
+	double lambda = 2.0;
+	/*
+	if (delta>0) {
+		if (delta<lambda) {
+			float acc = alpha + (1 - alpha)*delta / lambda;
+			//printf ("ac:%f\n", acc);
+			return acc;
+		}
+		//printf ("ac:1\n");
+
+		return 1.0;//tanh(delta);
+	}
+	else {
+		float acc = alpha*(1 + delta / 3.0);
+		if (acc<0) acc = 0;
+		//printf ("at:%f\n", acc);
+		return acc;
+	}
+	*/
+#if 1	
+	if (allowedspeed > shared->speed + 30*(18/5)) {
+		double curvature = pLearn->getLastCurvature();
+		return 1.0;
+	}
+	else {
+		const double radius = 0.33 / 2.0f + 0.133 * 0.8;
+		double gr = getEmulatedGearRatio(shared->speed);
+		double rm = 850;
+		double accel = allowedspeed / radius*gr / rm;
+		//	printf("cur accel = %f\n", accel);
+		return accel;
+	}
+	return 1.0;
+#endif
+
+}
+
 
 /* Antilocking filter for brakes */
-float filterABS(shared_use_st *shared, float brake)
+double filterABS(shared_use_st *shared, double brake)
 {
 	if (shared->speed < ABS_MINSPEED) return brake;
 	int i;
-	float slip = 0.0;
+	double slip = 0.0;
 	/*
 	for (i = 0; i < 4; i++) {
 	slip += car->_wheelSpinVel(i) * car->_wheelRadius(i) / shared->speed;
@@ -269,15 +498,17 @@ float filterABS(shared_use_st *shared, float brake)
 
 double getBrake(shared_use_st *shared)
 {
-	float currentspeedsqr = shared->speed*shared->speed;
-	float mu = ASPHALT_FRICTION_CONSTANT;
-	float mass = 1150;
-	float maxlookaheaddist = currentspeedsqr / (2.0*mu*GRAVITY_CONSTANT);
-	float lookaheaddist = getDistToSegEnd(shared);
+	double currentspeedsqr = shared->speed*shared->speed;
+	double mu = ASPHALT_FRICTION_CONSTANT;
+	double mass = 1150;
+	double maxlookaheaddist = currentspeedsqr / (2.0*mu*GRAVITY_CONSTANT);
+	
+	double lookaheaddist = getDistToSegEnd(shared);
 
-	float allowedspeed = getAllowedSpeedFromCurvature(shared, 0);
+	//printf("lookaheaddist = %f", lookaheaddist);
+	
+	double allowedspeed = getAllowedSpeedFromCurvature(shared, 0);
 #if 1
-
 	if (allowedspeed < shared->speed){
 		//printf("allowedspeed < shared->speed  allowSpeed = %f speed = %f \n", allowedspeed,shared->speed);
 		return min(1.0f, (shared->speed - allowedspeed) / (3.0));
@@ -291,11 +522,13 @@ double getBrake(shared_use_st *shared)
 		if (trackIndex > 18)
 			break;
 
+		//if (trackIndex == 2)
+			//printf("");
 		allowedspeed = getAllowedSpeedFromCurvature(shared, trackIndex);
 
 		if (allowedspeed < shared->speed) {
-			float allowedspeedsqr = allowedspeed*allowedspeed;
-			float brakedist = (currentspeedsqr - allowedspeedsqr) / (2.0*(mu*GRAVITY_CONSTANT));// +allowedspeedsqr*(CA*mu + CW)));
+			double allowedspeedsqr = allowedspeed*allowedspeed;
+			double brakedist = (currentspeedsqr - allowedspeedsqr) / (2.0*(mu*GRAVITY_CONSTANT));// +allowedspeedsqr*(CA*mu + CW)));
 
 			if (brakedist > lookaheaddist) {
 				return min(1.0f, (shared->speed - allowedspeed) / (3.0));
@@ -312,7 +545,7 @@ double getBrake(shared_use_st *shared)
 }
 
 
-const float WIDTHDIV = 4.0;                         /* [-] */
+const double WIDTHDIV = 4.0;                         /* [-] */
 
 /* Hold car on the track */
 double filterTrk(shared_use_st *shared, double accel)
@@ -374,8 +607,8 @@ bool isOutofTrack(shared_use_st *shared) {
 	return false;
 }
 
-const float LOOKAHEAD_CONST = 17.0;                 /* [m] */
-const float LOOKAHEAD_FACTOR = 0.33;                /* [-] */
+const double LOOKAHEAD_CONST = 17.0;                 /* [m] */
+const double LOOKAHEAD_FACTOR = 0.33;                /* [-] */
 
 /* compute target point for steering */
 double getTargetPoint(shared_use_st *shared)
@@ -421,8 +654,8 @@ int controlDriving(shared_use_st *shared){
 	//Input : shared_user_st
 	const double SC = 1.0;
 	double diff_angle = 0;
-
-	getDistToSegEnd(shared);
+	
+	pLearn->update(shared->track_forward_dists[0], shared->track_forward_angles[0], getAllowedCurvature(shared, 0),0);
 
 	if (isStuck(shared)) {
 		diff_angle = -shared->angle;
@@ -503,14 +736,15 @@ int controlDriving(shared_use_st *shared){
 
 	}
 
+
 //	if ((shared->toStart > 1800) && (shared->toStart < 1900))
 		//shared->accelCmd = 0.2;
 	
-	printf("toStart = %f, accelCmd = %f\n", shared->toStart, shared->accelCmd);
+	//printf("shared->track_dist_straight = %f\n", shared->track_dist_straight);
 
-	fprintf(fp, "%f, %f\n", shared->toStart, shared->accelCmd);
+	//fprintf(fp, "%f, %f\n", shared->toStart, shared->accelCmd);
 
-	//printf("shared->accel %f\n", shared->accelCmd);
+	printf("shared->accel %f\n", shared->accelCmd);
 
 	return 0;
 }
@@ -564,6 +798,9 @@ int main(int argc, char **argv){
 	}
 	printf("\n********** Memory sharing started, attached at %X **********\n", shared);
 
+
+	pLearn = new learn();
+
 	fp = fopen("C:\\Users\\shins\\Downloads\\temp\\1.dat", "wt");//"wt");
 
 	////////////////////// DON'T TOUCH IT - Default Setting
@@ -577,9 +814,17 @@ int main(int argc, char **argv){
 	shared->brakeCmd = 0.0;
 	shared->backwardCmd = GEAR_FORWARD;
 	////////////////////// END Initialize
+	DWORD currentTime;
 
 	while (shared->connected){
 		if (shared->written == 1) { // the new image data is ready to be read
+			/*
+			currentTime = timeGetTime();
+
+			deltaTime = (double)(currentTime - previousTime) / 1000.0f;
+
+			previousTime = currentTime;
+			*/
 			controlDriving(shared);
 			shared->written = 0;
 		}
