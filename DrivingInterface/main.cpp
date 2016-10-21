@@ -8,9 +8,10 @@
 #include <Windows.h>
 #include "linalg.h"
 #include "float.h"
-#include "learn.h"
 
-
+#include<iostream>
+#include<queue>
+using  namespace std;
 FILE *fp;
 
 #define SHARED_MOMORY_NAME1 "TORCS_SHARED1"
@@ -78,7 +79,6 @@ struct shared_use_st
 	int    backwardCmd;
 };
 
-learn *pLearn = NULL;
 
 static int stuck = 0;
 const double MAX_UNSTUCK_SPEED = 5.0;   /* [m/s] */
@@ -91,6 +91,108 @@ const double ABS_MINSPEED = 3.0;
 #define MAX_SPEED_PER_METER  100.0
 
 double previousaccel = 0.0;
+
+
+static bool trytoOut = false;
+
+double currentSectorStartDistance = -1;
+double tempDistance = -1;
+
+double currentSectorAngle = DBL_MAX;
+double tempAngle = -1;
+
+double currentCurvature = DBL_MAX;
+double currentAllowSpeed = MAX_SPEED_PER_METER;
+
+
+class trackInfo {
+public:
+	double dist;
+	double angle;
+	double curvature;
+	double allowedSpeed;
+
+	//적의 정보리스트 저장 필요
+	//double oppnent_x;
+	//double oppnent_x;
+};
+
+vector<trackInfo*> TrackInfoQueue;
+
+bool justCornerExit(shared_use_st *shared) {
+
+	const double LOOKAHEAD_CONST = 10.0;                 /* [m] */
+	const double LOOKAHEAD_FACTOR = 0.33;                /* [-] */
+
+	/* compute target point for steering */
+	double lookahead = LOOKAHEAD_CONST + shared->speed*LOOKAHEAD_FACTOR;
+	double length = shared->toStart - currentSectorStartDistance;
+	int index = TrackInfoQueue.size() - 1;
+	bool justCornerExit = false;
+	
+	while (length < lookahead) {
+
+		if (((trackInfo *)TrackInfoQueue[index])->curvature != 0.0) {
+			justCornerExit = true;
+			break;
+		}
+			
+		length += ((trackInfo *)TrackInfoQueue[index])->dist - ((trackInfo *)TrackInfoQueue[index - 1])->dist;
+		index--;
+
+		if (index <= 0) {
+			break;
+		}
+	}
+
+	return justCornerExit;
+}
+double getLastCurvature() {
+
+
+	trackInfo * ptrTrackinfo = (trackInfo *)TrackInfoQueue.back();
+
+	if (ptrTrackinfo == NULL)
+		return 0.0;
+
+	return ptrTrackinfo->curvature;
+}
+
+void update(double curtrackDist, double curTrackAngle, double curCurvature, double curallowSpeed) {
+
+	int  prevpushedItemIndex = -1;
+
+	trackInfo *ptrTrackinfo = NULL;
+
+	for (int i = 0; i < TrackInfoQueue.size(); i++){
+
+		ptrTrackinfo = (trackInfo *)TrackInfoQueue[i];
+
+		if (fabs(ptrTrackinfo->dist - curtrackDist) < DBL_EPSILON) {
+			prevpushedItemIndex = i;
+			break;
+		}
+	}
+
+	if (prevpushedItemIndex != -1) {
+		ptrTrackinfo->dist = curtrackDist;
+		ptrTrackinfo->angle = curTrackAngle;
+		ptrTrackinfo->curvature = curCurvature;
+		ptrTrackinfo->allowedSpeed = curallowSpeed;
+	}
+	else {
+		trackInfo *data = new trackInfo();
+
+		data->dist = curtrackDist;
+		data->angle = curTrackAngle;
+		data->curvature = curCurvature;
+		data->allowedSpeed = curallowSpeed;
+
+		TrackInfoQueue.push_back(data);
+	}
+
+}
+
 #if 1
 /* check if the car is stuck */
 bool isStuck(shared_use_st *shared)
@@ -150,6 +252,29 @@ double getTrackLength(shared_use_st *shared, int index){
 	double length = shared->track_forward_dists[index + 1] - shared->track_forward_dists[index];
 	return length;
 }
+
+double getAllowedSpeed(shared_use_st *shared, double deltaAngle, double deltaDist){
+	double mu = ASPHALT_FRICTION_CONSTANT;
+	double normdeltaAngle = deltaAngle;
+	NORM_PI_PI(deltaAngle);
+	double curvature = (deltaAngle) / deltaDist;
+	curvature = fabs(curvature);
+	double calcSpeed = sqrt((mu*1.5*GRAVITY_CONSTANT) / curvature);
+	
+	if (curvature == 0.0)
+		return MAX_SPEED_PER_METER;
+
+	if (isinf(calcSpeed)) {
+		calcSpeed = MAX_SPEED_PER_METER;
+	}
+
+	if (isnan(calcSpeed)) {
+		calcSpeed = MAX_SPEED_PER_METER;
+	}
+	
+	return calcSpeed;
+}
+
 double getAllowedCurvature(shared_use_st *shared, int index){
 
 	double first = 0.0;
@@ -272,7 +397,7 @@ double getCurgearRaitio(int getr) {
 	return ratio[gear];
 }
 
-double getCurGearMaxSpeed(int gear) {
+double getCurGearMaxSpeed() {
 
 	double maxspeed = 0;
 
@@ -440,11 +565,16 @@ double getaccel(shared_use_st *shared)
 	return 0.5;
 	}
 	*/
-	double allowedspeed = getAllowedSpeedFromCurvature(shared, 0);
+	double allowedspeed = currentAllowSpeed;// getAllowedSpeedFromCurvature(shared, 0);
 
-	if (allowedspeed == MAX_SPEED_PER_METER)
-		return 1.0;
-
+	if (allowedspeed == MAX_SPEED_PER_METER) {
+		printf("MAX_SPEED_PER_METER\n");
+		
+		if(!justCornerExit(shared))
+			return 1.0;
+	}
+		//return 1.0;
+#if 1
 	double mu = ASPHALT_FRICTION_CONSTANT;
 	double currentspeedsqr = shared->speed*shared->speed;
 	double maxlookaheaddist = currentspeedsqr / (2.0*mu*GRAVITY_CONSTANT);
@@ -468,7 +598,7 @@ double getaccel(shared_use_st *shared)
 		lookaheaddist += getTrackLength(shared, index);
 		index++;
 	}
-
+#endif
 	//printf("allowedspeed = %f km/h speed = %f km/h \n", allowedspeed * (18 / 5), shared->speed* (18 / 5));
 	double delta = allowedspeed - (shared->speed + 3.0);
 	double alpha = 0.5;
@@ -482,11 +612,11 @@ double getaccel(shared_use_st *shared)
 		}
 		//printf ("ac:1\n");
 		//  if (fabs(1.0 - previousaccel) < 0.1)
-		//      return 1.0;
+	    //return 1.0;
 
-		double curGearmaxSpeed = getCurGearMaxSpeed(getCurgear());
+		double curGearmaxSpeed = getCurGearMaxSpeed();
 
-		if (allowedspeed - curGearmaxSpeed < 0) {
+		if ((allowedspeed * (18 / 5) )- curGearmaxSpeed < 0) {
 			const double radius = 0.33 / 2.0f + 0.133 * 0.75;
 			double gr = getEmulatedGearRatio(curGearmaxSpeed);
 			double rm = 850;
@@ -588,15 +718,17 @@ double getBrake(shared_use_st *shared)
 
 	//printf("lookaheaddist = %f", lookaheaddist);
 
-	double allowedspeed = getAllowedSpeedFromCurvature(shared, 0);
+	double allowedspeed = currentAllowSpeed;// = getAllowedSpeedFromCurvature(shared, 0);
 #if 1
+	
 	if (allowedspeed < shared->speed){
 		//printf("allowedspeed < shared->speed  allowSpeed = %f speed = %f \n", allowedspeed,shared->speed);
 		return min(1.0f, (shared->speed - allowedspeed) / (3.0));
 		//return 1.0;
 	}
+
 #endif
-	int trackIndex = 1;
+	int trackIndex = 0;
 #if 1
 	while (lookaheaddist < maxlookaheaddist) {
 
@@ -713,17 +845,27 @@ double getTargetPoint(shared_use_st *shared)
 
 double getSteer(shared_use_st *shared)
 {
-	double targetAngle;
-	float fistangle_recon = targetAngle = getTargetPoint(shared);
+	double targetAngle = 0;
+	double initargetAngle = getTargetPoint(shared);
+
 	printf("targetAngle = %f\n", targetAngle);
 	targetAngle -= shared->track_current_angle - shared->angle;
 	printf("shared->track_current_angle + shared->angle = %f\n", shared->track_current_angle + shared->angle);
 	NORM_PI_PI(targetAngle);
+	
+	if( (targetAngle - shared->track_current_angle) < 0)
+		targetAngle -= 1.0*(shared->toMiddle - 3) / shared->track_width;
+	else if( (targetAngle - shared->track_current_angle) > 0)
+		targetAngle -= 1.0*(shared->toMiddle + 3) / shared->track_width;
+	else
+		targetAngle -= 1.0*(shared->toMiddle) / shared->track_width;
 
-	if (fistangle_recon < 0)
+#if 0
+	if (direction < 0)
 		targetAngle -= 1.0*(shared->toMiddle + 5) / (shared->track_width);
 	else
 		targetAngle -= 1.0*(shared->toMiddle - 5) / (shared->track_width);
+#endif
 	/*  if (targetAngle < 0)
 	targetAngle -= 1.0*(-shared->toMiddle/2) / shared->track_width;
 	else if (targetAngle > 0)
@@ -731,13 +873,12 @@ double getSteer(shared_use_st *shared)
 	*/
 
 	printf("targetAngle = %f\n", targetAngle);
-	double steer = targetAngle / ((21 * M_PI) / 180);
+	double steer = targetAngle;// / ((21 * M_PI) / 180);
 
 	printf("steer = %f\n", steer);
 	return steer;
 }
 
-static bool trytoOut = false;
 
 int controlDriving(shared_use_st *shared){
 	if (shared == NULL) return -1;
@@ -746,7 +887,21 @@ int controlDriving(shared_use_st *shared){
 	const double SC = 1.0;
 	double diff_angle = 0;
 
-	//pLearn->update(shared->track_forward_dists[0], shared->track_forward_angles[0], getAllowedCurvature(shared, 0),0);
+	if (currentSectorStartDistance == -1)
+		currentAllowSpeed = MAX_SPEED_PER_METER;
+
+	if (fabs(tempDistance - shared->track_forward_dists[0]) > DBL_EPSILON) {
+		currentSectorStartDistance = tempDistance;
+		currentSectorAngle = tempAngle;
+
+		currentAllowSpeed = getAllowedSpeed(shared, shared->track_forward_angles[0] - currentSectorAngle,
+			fabs(shared->track_forward_dists[0] - currentSectorStartDistance));
+	}
+
+	tempAngle = shared->track_forward_angles[0];
+	tempDistance = shared->track_forward_dists[0];
+
+	update(shared->track_forward_dists[0], shared->track_forward_angles[0], getAllowedCurvature(shared, 0),0);
 
 	if (isStuck(shared)) {
 		diff_angle = -shared->angle;
@@ -817,7 +972,7 @@ int controlDriving(shared_use_st *shared){
 		printf("diff_angle = %f\n", RADIANS_TO_DEGREES(diff_angle));
 		*/
 		//Output : 4개의 Output Cmd 값을 도출하세요.
-		shared->steerCmd = getSteer(shared);// diff_angle / ((21 * M_PI) / 180);
+		shared->steerCmd = diff_angle / ((21 * M_PI) / 180); //getSteer(shared);//
 		shared->brakeCmd = filterABS(shared, getBrake(shared));
 		if (shared->brakeCmd == 0.0)
 			shared->accelCmd = filterTrk(shared, getaccel(shared));
@@ -834,11 +989,24 @@ int controlDriving(shared_use_st *shared){
 	//printf("shared->track_dist_straight = %f\n", shared->track_dist_straight);
 
 	//fprintf(fp, "%f, %f\n", shared->toStart, shared->accelCmd);
-
+	/*
 	printf("shared->accel %f\n", shared->accelCmd);
 	printf("shared->break %f\n", shared->brakeCmd);
 	printf("shared->angle %f\n", shared->angle);
 	printf("shared->steer %f\n", shared->steerCmd);
+	
+	if (shared->track_curve_type == CURVE_TYPE_LEFT)
+		printf("CURVE_TYPE_LEFT\n");
+
+	if (shared->track_curve_type == CURVE_TYPE_RIGHT)
+		printf("CURVE_TYPE_RIGHT\n");
+
+	if (shared->track_curve_type == CURVE_TYPE_STRAIGHT)
+		printf("CURVE_TYPE_STRAIGHT\n");
+		*/
+	printf("currentSectorStartDistance = %f \n",     currentSectorStartDistance);
+	printf("shared->track_forward_dists[0] = %f \n", shared->track_forward_dists[0]);
+
 	previousaccel = shared->accelCmd;
 	return 0;
 }
@@ -893,7 +1061,8 @@ int main(int argc, char **argv){
 	printf("\n********** Memory sharing started, attached at %X **********\n", shared);
 
 
-	pLearn = new learn();
+
+
 
 	fp = fopen("C:\\Users\\shins\\Downloads\\temp\\1.dat", "wt");//"wt");
 
@@ -953,6 +1122,15 @@ int main(int argc, char **argv){
 			}
 
 		}
+	}
+
+
+	trackInfo *ptrTrackinfo = NULL;
+
+	for (int i = 0; i < TrackInfoQueue.size(); i++){
+
+		ptrTrackinfo = (trackInfo *)TrackInfoQueue[i];
+		delete ptrTrackinfo;
 	}
 
 	endShare(shared, hMap);
