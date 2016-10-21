@@ -122,7 +122,7 @@ vector<trackInfo*> TrackInfoQueue;
 bool justCornerExit(shared_use_st *shared) {
 
 	const double LOOKAHEAD_CONST = 10.0;                 /* [m] */
-	const double LOOKAHEAD_FACTOR = 0.33;                /* [-] */
+	const double LOOKAHEAD_FACTOR = 0.13;                /* [-] */
 
 	/* compute target point for steering */
 	double lookahead = LOOKAHEAD_CONST + shared->speed*LOOKAHEAD_FACTOR;
