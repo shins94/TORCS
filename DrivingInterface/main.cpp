@@ -158,6 +158,123 @@ double getLastCurvature() {
 	return ptrTrackinfo->curvature;
 }
 
+
+#define OPP_IGNORE	0
+#define OPP_FRONT	(1<<0)
+#define OPP_BACK	(1<<1)
+#define OPP_SIDE	(1<<2)
+#define OPP_COLL	(1<<3)
+
+
+class Opponent {
+public:
+	Opponent();
+
+	int getState() { return state; }
+	float getCatchDist() { return catchdist; }
+	float getDistance() { return distance; }
+	float getSideDist() { return sidedist; }
+	float getWidth() { return width; }
+	float getSpeed() { return speed; }
+	void update(float toStart, float toMiddle);
+
+private:
+	float getDistToSegStart();
+
+	float distance;		/* approximation of the real distance */
+	float speed;		/* speed in direction of the track */
+	float catchdist;	/* distance needed to catch the opponent */
+	float width;		/* the cars needed width on the track */
+	float sidedist;		/* distance of center of gravity of the cars */
+	int state;			/* state bitmask of the opponent */
+
+	/* constants */
+	static float FRONTCOLLDIST;
+	static float BACKCOLLDIST;
+	static float SIDECOLLDIST;
+	static float LENGTH_MARGIN;
+	static float SIDE_MARGIN;
+};
+
+float Opponent::FRONTCOLLDIST = 200.0;	/* [m] distance to check for other cars */
+float Opponent::BACKCOLLDIST = 50.0;	/* [m] distance to check for other cars */
+float Opponent::LENGTH_MARGIN = 2.0;	/* [m] safety margin */
+float Opponent::SIDE_MARGIN = 1.0;
+float opponentLength = 4.8;
+
+float Opponent::getSpeed()
+{
+}
+
+/* Compute the length to the start of the segment */
+float Opponent::getDistToSegStart()
+{
+
+}
+
+/* Update the values in Opponent this */
+void Opponent::update(shared_use_st *shared,float toStart, float toMiddle)
+{
+
+	state = OPP_IGNORE;
+
+	/* updating distance along the middle */
+	distance = fabs(toStart - shared->toStart);
+
+
+	/* update speed in track direction */
+	speed = Opponent::getSpeed(toStart);
+	
+	//float cosa = speed / sqrt(car->_speed_x*car->_speed_x + car->_speed_y*car->_speed_y);
+	//float alpha = acos(cosa);
+	
+	width = opponentLength;// car->_dimension_x*sin(alpha) + car->_dimension_y*cosa;
+	float SIDECOLLDIST = opponentLength; // MIN(car->_dimension_x, mycar->_dimension_x);
+
+	/* is opponent in relevant range -50..200 m */
+	if (distance > -BACKCOLLDIST && distance < FRONTCOLLDIST) {
+		/* is opponent in front and slower */
+		if (distance > SIDECOLLDIST && speed < shared->speed) {
+			catchdist = shared->speed*distance / (shared->speed - speed);
+			state |= OPP_FRONT;
+			distance -= opponentLength;
+		
+			float cardist = toMiddle - shared->toMiddle;
+			sidedist = cardist;
+			cardist = fabs(cardist) - fabs(width / 2.0) - mycar->_dimension_y / 2.0;
+			if (cardist < SIDE_MARGIN) state |= OPP_COLL;
+		}
+		else
+			/* is opponent behind and faster */
+			if (distance < -SIDECOLLDIST && speed > shared->speed) {
+				catchdist = shared->speed*distance / (speed - shared->speed);
+				state |= OPP_BACK;
+				distance -= MAX(car->_dimension_x, mycar->_dimension_x);
+				distance -= LENGTH_MARGIN;
+			}
+			else
+				/* is opponent aside */
+				if (distance > -SIDECOLLDIST &&
+					distance < SIDECOLLDIST) {
+					sidedist = car->_trkPos.toMiddle - mycar->_trkPos.toMiddle;
+					state |= OPP_SIDE;
+				}
+	}
+}
+
+
+void updateOpponent(shared_use_st *shared) {
+
+	for (int i = 0; i < 10; i++) {
+
+		shared->dist_cars[i]
+	
+	
+	}
+
+}
+
+
 void update(double curtrackDist, double curTrackAngle, double curCurvature, double curallowSpeed) {
 
 	int  prevpushedItemIndex = -1;
@@ -845,22 +962,18 @@ double getTargetPoint(shared_use_st *shared)
 
 double getSteer(shared_use_st *shared)
 {
-	double targetAngle = 0;
-	double initargetAngle = getTargetPoint(shared);
+
+
+#if 0
+	double targetAngle = getTargetPoint(shared);
 
 	printf("targetAngle = %f\n", targetAngle);
 	targetAngle -= shared->track_current_angle - shared->angle;
 	printf("shared->track_current_angle + shared->angle = %f\n", shared->track_current_angle + shared->angle);
 	NORM_PI_PI(targetAngle);
 	
-	if( (targetAngle - shared->track_current_angle) < 0)
-		targetAngle -= 1.0*(shared->toMiddle - 3) / shared->track_width;
-	else if( (targetAngle - shared->track_current_angle) > 0)
-		targetAngle -= 1.0*(shared->toMiddle + 3) / shared->track_width;
-	else
-		targetAngle -= 1.0*(shared->toMiddle) / shared->track_width;
+	targetAngle -= 1.0*(shared->toMiddle) / shared->track_width ;
 
-#if 0
 	if (direction < 0)
 		targetAngle -= 1.0*(shared->toMiddle + 5) / (shared->track_width);
 	else
@@ -872,10 +985,17 @@ double getSteer(shared_use_st *shared)
 	targetAngle -= 1.0*(shared->toMiddle/2) / shared->track_width;
 	*/
 
+	double targetAngle = shared->angle;
+
+	targetAngle -= 1.0*(shared->toMiddle +2) / shared->track_width;
+	
+	NORM_PI_PI(targetAngle);
+
 	printf("targetAngle = %f\n", targetAngle);
-	double steer = targetAngle;// / ((21 * M_PI) / 180);
+	double steer = targetAngle / ((21 * M_PI) / 180);
 
 	printf("steer = %f\n", steer);
+	
 	return steer;
 }
 
@@ -972,7 +1092,7 @@ int controlDriving(shared_use_st *shared){
 		printf("diff_angle = %f\n", RADIANS_TO_DEGREES(diff_angle));
 		*/
 		//Output : 4개의 Output Cmd 값을 도출하세요.
-		shared->steerCmd = diff_angle / ((21 * M_PI) / 180); //getSteer(shared);//
+		shared->steerCmd = diff_angle / ((21 * M_PI) / 180);// getSteer(shared);//
 		shared->brakeCmd = filterABS(shared, getBrake(shared));
 		if (shared->brakeCmd == 0.0)
 			shared->accelCmd = filterTrk(shared, getaccel(shared));
