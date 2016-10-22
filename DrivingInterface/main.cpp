@@ -36,9 +36,9 @@ double mass = 1150;
 
 #define NORM_PI_PI(x)               \
   do {                        \
-           while ((x) > M_PI) { (x) -= 2*M_PI; }   \
-		                           while ((x) < -M_PI) { (x) += 2*M_PI; }  \
-         } while (0)
+             while ((x) > M_PI) { (x) -= 2*M_PI; }   \
+			 		                           while ((x) < -M_PI) { (x) += 2*M_PI; }  \
+           } while (0)
 
 #define RADIANS_TO_DEGREES(radians) ((radians) * (180.0 / M_PI))
 
@@ -140,21 +140,21 @@ vector<trackInfo*> TrackInfoQueue;
 bool justCornerExit(shared_use_st *shared) {
 
 	const double LOOKAHEAD_CONST = 10.0;                 /* [m] */
-	const double LOOKAHEAD_FACTOR = 0.33;                /* [-] */
+	const double LOOKAHEAD_FACTOR = 0.13;                /* [-] */
 
 	/* compute target point for steering */
 	double lookahead = LOOKAHEAD_CONST + shared->speed*LOOKAHEAD_FACTOR;
 	double length = shared->toStart - currentSectorStartDistance;
 	int index = TrackInfoQueue.size() - 1;
 	bool justCornerExit = false;
-	
+
 	while (length < lookahead) {
 
 		if (((trackInfo *)TrackInfoQueue[index])->curvature != 0.0) {
 			justCornerExit = true;
 			break;
 		}
-			
+
 		length += ((trackInfo *)TrackInfoQueue[index])->dist - ((trackInfo *)TrackInfoQueue[index - 1])->dist;
 		index--;
 
@@ -256,10 +256,10 @@ void Opponent::update(shared_use_st *shared, double dist, double toMiddle)
 
 	/* update speed in track direction */
 	speed = Opponent::getSpeed(shared->toStart + dist);
-	
+
 	//float cosa = speed / sqrt(car->_speed_x*car->_speed_x + car->_speed_y*car->_speed_y);
 	//float alpha = acos(cosa);
-	
+
 	width = opponentLength;// car->_dimension_x*sin(alpha) + car->_dimension_y*cosa;
 	double SIDECOLLDIST = opponentLength; // MIN(car->_dimension_x, mycar->_dimension_x);
 
@@ -270,7 +270,7 @@ void Opponent::update(shared_use_st *shared, double dist, double toMiddle)
 			catchdist = shared->speed*distance / (shared->speed - speed);
 			state |= OPP_FRONT;
 			distance -= opponentLength;
-		
+
 			float cardist = toMiddle - shared->toMiddle;
 			sidedist = cardist;
 			cardist = fabs(cardist) - fabs(width / 2.0) - MYCAR_DIMENSION_Y / 2.0;
@@ -284,27 +284,27 @@ void Opponent::update(shared_use_st *shared, double dist, double toMiddle)
 				distance -= max(OPP_DIMENSION_X, MYCAR_DIMENSION_Y);
 				distance -= LENGTH_MARGIN;
 			}
-		else
-			/* is opponent aside */
-			if (distance > -SIDECOLLDIST &&
-				distance < SIDECOLLDIST) {
-				sidedist = toMiddle - shared->toMiddle;
-				state |= OPP_SIDE;
-			}
+			else
+				/* is opponent aside */
+				if (distance > -SIDECOLLDIST &&
+					distance < SIDECOLLDIST) {
+					sidedist = toMiddle - shared->toMiddle;
+					state |= OPP_SIDE;
+				}
 	}
 }
 
 Opponent *opponents = NULL;
 
-void updateOpponent(shared_use_st *shared,Opponent *pOpponent) {
+void updateOpponent(shared_use_st *shared, Opponent *pOpponent) {
 
 	int sign = 1;
 	for (int i = 0; i < 10; i++) {
 		if (i > 4)
 			sign = -1;
-		
-		printf("%i opponnet dist= %f \n",i, shared->dist_cars[i]);
-		printf("%i opponnet toMiddle= %f\n",i, shared->dist_cars[i+1]);
+
+//		printf("%i opponnet dist= %f \n", i, shared->dist_cars[i]);
+//		printf("%i opponnet toMiddle= %f\n", i, shared->dist_cars[i + 1]);
 
 		pOpponent->update(shared, sign*shared->dist_cars[i], shared->dist_cars[i + 1]);
 	}
@@ -414,7 +414,7 @@ double getAllowedSpeed(shared_use_st *shared, double deltaAngle, double deltaDis
 	double curvature = (deltaAngle) / deltaDist;
 	curvature = fabs(curvature);
 	double calcSpeed = sqrt((mu*1.5*GRAVITY_CONSTANT) / curvature);
-	
+
 	if (curvature == 0.0)
 		return MAX_SPEED_PER_METER;
 
@@ -425,7 +425,7 @@ double getAllowedSpeed(shared_use_st *shared, double deltaAngle, double deltaDis
 	if (isnan(calcSpeed)) {
 		calcSpeed = MAX_SPEED_PER_METER;
 	}
-	
+
 	return calcSpeed;
 }
 
@@ -714,11 +714,11 @@ double getaccel(shared_use_st *shared)
 
 	if (allowedspeed == MAX_SPEED_PER_METER) {
 		printf("MAX_SPEED_PER_METER\n");
-		
-		if(!justCornerExit(shared))
+
+		if (!justCornerExit(shared))
 			return 1.0;
 	}
-		//return 1.0;
+	//return 1.0;
 #if 1
 	double mu = ASPHALT_FRICTION_CONSTANT;
 	double currentspeedsqr = shared->speed*shared->speed;
@@ -757,11 +757,11 @@ double getaccel(shared_use_st *shared)
 		}
 		//printf ("ac:1\n");
 		//  if (fabs(1.0 - previousaccel) < 0.1)
-	    //return 1.0;
+		//return 1.0;
 
 		double curGearmaxSpeed = getCurGearMaxSpeed();
 
-		if ((allowedspeed * (18 / 5) )- curGearmaxSpeed < 0) {
+		if ((allowedspeed * (18 / 5)) - curGearmaxSpeed < 0) {
 			const double radius = 0.33 / 2.0f + 0.133 * 0.75;
 			double gr = getEmulatedGearRatio(curGearmaxSpeed);
 			double rm = 850;
@@ -838,12 +838,12 @@ double filterBColl(shared_use_st *shared, double brake)
 	int sign = 1;
 	for (i = 0; i < 10; i++) {
 		if (opponents[i].getState() & OPP_COLL) {
-			
+
 			if (i > 4)
 				sign = -1;
 			float allowedspeedsqr = opponents[i].getSpeed(shared->toStart + (sign*shared->dist_cars[i]));
 			allowedspeedsqr *= allowedspeedsqr;
-			float brakedist = mass*(currentspeedsqr - allowedspeedsqr) / (2.0*(cm ));
+			float brakedist = mass*(currentspeedsqr - allowedspeedsqr) / (2.0*(cm));
 			if (brakedist > opponents[i].getDistance()) {
 				return 1.0;
 			}
@@ -890,7 +890,7 @@ double getBrake(shared_use_st *shared)
 
 	double allowedspeed = currentAllowSpeed;// = getAllowedSpeedFromCurvature(shared, 0);
 #if 1
-	
+
 	if (allowedspeed < shared->speed){
 		//printf("allowedspeed < shared->speed  allowSpeed = %f speed = %f \n", allowedspeed,shared->speed);
 		return min(1.0f, (shared->speed - allowedspeed) / (3.0));
@@ -1024,8 +1024,8 @@ double getSteer(shared_use_st *shared)
 	targetAngle -= shared->track_current_angle - shared->angle;
 	printf("shared->track_current_angle + shared->angle = %f\n", shared->track_current_angle + shared->angle);
 	NORM_PI_PI(targetAngle);
-	
-	targetAngle -= 1.0*(shared->toMiddle) / shared->track_width ;
+
+	targetAngle -= 1.0*(shared->toMiddle) / shared->track_width;
 
 	if (direction < 0)
 		targetAngle -= 1.0*(shared->toMiddle + 5) / (shared->track_width);
@@ -1040,15 +1040,15 @@ double getSteer(shared_use_st *shared)
 
 	double targetAngle = shared->angle;
 
-	targetAngle -= 1.0*(shared->toMiddle +2) / shared->track_width;
-	
+	targetAngle -= 1.0*(shared->toMiddle + 2) / shared->track_width;
+
 	NORM_PI_PI(targetAngle);
 
 	//printf("targetAngle = %f\n", targetAngle);
 	double steer = targetAngle / ((21 * M_PI) / 180);
 
 	//printf("steer = %f\n", steer);
-	
+
 	return steer;
 }
 
@@ -1059,8 +1059,6 @@ int controlDriving(shared_use_st *shared){
 	//Input : shared_user_st
 	const double SC = 1.0;
 	double diff_angle = 0;
-
-	opponents = new Opponent[10];
 
 	updateOpponent(shared, opponents);
 
@@ -1078,7 +1076,7 @@ int controlDriving(shared_use_st *shared){
 	tempAngle = shared->track_forward_angles[0];
 	tempDistance = shared->track_forward_dists[0];
 
-	update(shared->track_forward_dists[0], shared->track_forward_angles[0], getAllowedCurvature(shared, 0),0);
+	update(shared->track_forward_dists[0], shared->track_forward_angles[0], getAllowedCurvature(shared, 0), 0);
 
 	if (isStuck(shared)) {
 		diff_angle = -shared->angle;
@@ -1171,18 +1169,18 @@ int controlDriving(shared_use_st *shared){
 	printf("shared->break %f\n", shared->brakeCmd);
 	printf("shared->angle %f\n", shared->angle);
 	printf("shared->steer %f\n", shared->steerCmd);
-	
+
 	if (shared->track_curve_type == CURVE_TYPE_LEFT)
-		printf("CURVE_TYPE_LEFT\n");
+	printf("CURVE_TYPE_LEFT\n");
 
 	if (shared->track_curve_type == CURVE_TYPE_RIGHT)
-		printf("CURVE_TYPE_RIGHT\n");
+	printf("CURVE_TYPE_RIGHT\n");
 
 	if (shared->track_curve_type == CURVE_TYPE_STRAIGHT)
-		printf("CURVE_TYPE_STRAIGHT\n");
-		*/
-//	printf("currentSectorStartDistance = %f \n",     currentSectorStartDistance);
-//	printf("shared->track_forward_dists[0] = %f \n", shared->track_forward_dists[0]);
+	printf("CURVE_TYPE_STRAIGHT\n");
+	*/
+	//	printf("currentSectorStartDistance = %f \n",     currentSectorStartDistance);
+	//	printf("shared->track_forward_dists[0] = %f \n", shared->track_forward_dists[0]);
 
 	previousaccel = shared->accelCmd;
 	return 0;
@@ -1209,6 +1207,7 @@ int main(int argc, char **argv){
 	////////////////////// set up memory sharing
 	struct shared_use_st *shared = NULL;
 
+	opponents = new Opponent[10];
 
 	// try to connect to shared memory 1
 	HANDLE hMap = OpenFileMappingA(FILE_MAP_ALL_ACCESS, false, SHARED_MOMORY_NAME1);
