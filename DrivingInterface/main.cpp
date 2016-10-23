@@ -276,9 +276,9 @@ void Opponent::update(int ID,shared_use_st *shared, double dist, double toMiddle
 
 	this->id = ID;
 
-	if (id == 3){
-		printf("");//
-	}
+	//if (id == 3){
+//		printf("");//
+//	}
 
 	/* updating distance along the middle */
 	distance = dist;
@@ -825,8 +825,8 @@ double filterBColl(shared_use_st *shared, double brake)
 			
 			float brakedist = mass*(currentspeedsqr - allowedspeedsqr) / (2.0*(cm));
 			if (brakedist > opponents[i].getDistance()) {
-				printf("break with i = %d speed = %f tomiddle = %f mytomiddle = %f\n", i, opponents[i].getSpeed(),
-					opponents[i].getToMiddle(),shared->toMiddle);
+			//	printf("break with i = %d speed = %f tomiddle = %f mytomiddle = %f\n", i, opponents[i].getSpeed(),
+			//		opponents[i].getToMiddle(),shared->toMiddle);
 				return 1.0;
 			}
 		}
@@ -1224,15 +1224,15 @@ float getOffset(shared_use_st *shared)
 			myoffset -= a*OVERTAKE_OFFSET_INC ;
 			//myoffset= 0.0;
 
-			printf("return to previous pos myoffset -= %f\n", myoffset);
+			//printf("return to previous pos myoffset -= %f\n", myoffset);
 		}
 		else if (myoffset < -a*OVERTAKE_OFFSET_INC) {
 			myoffset += a*OVERTAKE_OFFSET_INC;
 			//myoffset= 0.0;
-			printf("return to previous pos myoffset  += %f\n", myoffset);
+			//printf("return to previous pos myoffset  += %f\n", myoffset);
 		}
 		else {
-			printf("myoffset = 0.0\n");
+			//printf("myoffset = 0.0\n");
 			myoffset = 0.0;
 		}
 	}
@@ -1307,7 +1307,7 @@ int controlDriving(shared_use_st *shared){
 			shared->accelCmd = 0.0;
 			shared->backwardCmd = GEAR_BACKWARD;
 
-			printf("isStuck\n");
+			//printf("isStuck\n");
 		}
 		else {
 			//Output : 4개의 Output Cmd 값을 도출하세요.
@@ -1317,7 +1317,7 @@ int controlDriving(shared_use_st *shared){
 			shared->backwardCmd = GEAR_BACKWARD;
 			trytoOut = true;
 			isStucked = true;
-			printf("try to out from stuck\n");
+			//printf("try to out from stuck\n");
 		}
 
 	}
@@ -1335,7 +1335,7 @@ int controlDriving(shared_use_st *shared){
 			shared->accelCmd = 0.0;
 			shared->backwardCmd = GEAR_FORWARD;
 
-			printf("isOutofTrack where = %f\n", shared->toStart);
+			//printf("isOutofTrack where = %f\n", shared->toStart);
 		}
 		else {
 			//Output : 4개의 Output Cmd 값을 도출하세요.
@@ -1345,10 +1345,10 @@ int controlDriving(shared_use_st *shared){
 			shared->backwardCmd = GEAR_FORWARD;
 			trytoOut = true;
 
-			printf("try to out from out of track\n");
+			//printf("try to out from out of track\n");
 		}
 
-		printf("speed = %f", shared->speed);
+		//printf("speed = %f", shared->speed);
 
 	}
 	else {
