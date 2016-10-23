@@ -12,10 +12,14 @@
 #include<iostream>
 #include<queue>
 using  namespace std;
+
 FILE *fp;
-
-
 clock_t previusTime;
+
+#define LEFT 75
+#define RIGHT 77
+#define UP 72
+#define DOWN 80
 
 #define SHARED_MOMORY_NAME1 "TORCS_SHARED1"
 #define SHARED_MOMORY_NAME2 "TORCS_SHARED2"
@@ -92,12 +96,8 @@ const double MAX_UNSTUCK_COUNT = 20.0;
 const double ABS_SLIP = 0.9;                         /* [-] range [0.95..0.3] */
 const double ABS_MINSPEED = 3.0;
 #define MAX_SPEED_PER_METER  100.0
-
 double previousaccel = 0.0;
-
-
 static bool trytoOut = false;
-
 double currentSectorStartDistance = -1;
 double tempDistance = -1;
 
@@ -213,7 +213,7 @@ public:
 	double getWidth() { return width; }
 	
 	double getSpeed() { return speed; }
-	void update(shared_use_st *shared, double dist, double toMiddle);
+	void update(int id,shared_use_st *shared, double dist, double toMiddle);
 
 private:
 	void calcSpeed(double toStart);
@@ -228,6 +228,7 @@ private:
 	int state;			/* state bitmask of the opponent */
 	double prevToStart = 0;
 
+	int id;
 	/* constants */
 	static double FRONTCOLLDIST;
 	static double BACKCOLLDIST;
@@ -247,24 +248,19 @@ Opponent::Opponent() {
 }
 
 double deltaCalc;
+double Timediff;
 
 void Opponent::calcSpeed(double toStart)
 {
-	clock_t current = clock();        // 시간설정
-	double Timediff = (current - previusTime)/(double)CLOCKS_PER_SEC;
-
 	speed = (toStart - prevToStart) / Timediff;
-
-
-	previusTime = current;
 	prevToStart = toStart;
-
+	/*
 	if (speed > MAX_SPEED_PER_METER + 100)
 		speed = 0;
 	
 	if (speed < 0)
 		speed = 0;
-
+		*/
 }
 
 /* Compute the length to the start of the segment */
@@ -274,10 +270,16 @@ double Opponent::getDistToSegStart(shared_use_st *shared, double toStart)
 }
 
 const float TIME_MARGIN = 2.0;
-/* Update the values in Opponent this */
-void Opponent::update(shared_use_st *shared, double dist, double toMiddle)
+
+void Opponent::update(int ID,shared_use_st *shared, double dist, double toMiddle)
 {
 	state = OPP_IGNORE;
+
+	this->id = ID;
+
+	if (id == 3){
+		printf("");//
+	}
 
 	/* updating distance along the middle */
 	distance = dist;
@@ -301,18 +303,19 @@ void Opponent::update(shared_use_st *shared, double dist, double toMiddle)
 			state |= OPP_FRONT;
 			distance -= opponentLength;
 
-			float cardist = this->toMiddle - shared->toMiddle;
+			double cardist = this->toMiddle - shared->toMiddle;
 			sidedist = cardist;
-			cardist = fabs(cardist) - fabs(width / 2.0) - MYCAR_DIMENSION_Y / 2.0;
-
+			cardist = fabs(cardist) - fabs(width / 2.0) - (MYCAR_DIMENSION_Y / 2.0);
+			/*
 		// smooth collision ? 
-		float du = fabs(getSpeed() - shared->speed);
-			float t_impact = 10;
+			double du = fabs(getSpeed() - shared->speed);
+			double t_impact = 10;
+
 			if (du>0) {
 				t_impact = fabs(distance / du);
 			}
-			if (cardist < SIDE_MARGIN
-				&& t_impact < TIME_MARGIN) {
+			*/
+			if (cardist < SIDE_MARGIN) {//&& t_impact < TIME_MARGIN) {
 				state |= OPP_COLL;
 				//printf ("OPP_COLL\n");
 			}
@@ -341,41 +344,7 @@ void Opponent::update(shared_use_st *shared, double dist, double toMiddle)
 			}
 	}
 
-
-
-
-
-
 }
-//
-//// Update overlaptimers of opponents.
-//void Opponent::updateOverlapTimer()
-//{
-//	if (shared->race.laps > mycar->race.laps) {
-//		if (getState() & (OPP_BACK | OPP_SIDE)) {
-//			overlaptimer += s->deltaTime;
-//		}
-//		else if (getState() & OPP_FRONT) {
-//			overlaptimer = LAP_BACK_TIME_PENALTY;
-//		}
-//		else {
-//			if (overlaptimer > 0.0) {
-//				if (getState() & OPP_FRONT_FAST) {
-//					overlaptimer = MIN(0.0, overlaptimer);
-//				}
-//				else {
-//					overlaptimer -= s->deltaTime;
-//				}
-//			}
-//			else {
-//				overlaptimer += s->deltaTime;
-//			}
-//		}
-//	}
-//	else {
-//		overlaptimer = 0.0;
-//	}
-//}
 
 #define OPPONENT_NUM 10
 
@@ -389,7 +358,7 @@ void updateOpponent(shared_use_st *shared, Opponent *pOpponent) {
 //		printf("%i opponnet dist= %f \n", i, shared->dist_cars[i]);
 //		printf("%i opponnet toMiddle= %f\n", i, shared->dist_cars[i + 1]);
 		if ((shared->dist_cars[i] != 0.0) && (shared->dist_cars[i] != 100.0) && (shared->dist_cars[i + 1] != 9.0))
-			pOpponent[index].update(shared,shared->dist_cars[i], shared->dist_cars[i + 1]);
+			pOpponent[index].update(i,shared,shared->dist_cars[i], shared->dist_cars[i + 1]);
 		else
 			pOpponent[index].clearInfo();
 		
@@ -473,19 +442,6 @@ bool isStuck(shared_use_st *shared)
 inline int sign(double x) {
 	return (x > 0) ? 1 : ((x < 0) ? -1 : 0);
 }
-//
-///* Compute the allowed speed on a segment */
-//double getAllowedSpeed(shared_use_st *shared)
-//{
-//  if (shared->track_curve_type == CURVE_TYPE_STRAIGHT) {
-//      return FLT_MAX;
-//  }
-//  else {
-//      double mu = 1.2;
-//      return sqrt(mu*9.8*shared->track_width);
-//  }
-//}
-//
 
 #define CURRENT_TRACK_INDEX -1
 
@@ -534,11 +490,6 @@ double getAllowedCurvature(shared_use_st *shared, int index){
 
 		deltaAngle = shared->track_forward_angles[index + 1] - shared->track_forward_angles[index];
 	}
-
-	/*
-	if (deltaAngle < 0) {
-	printf("bug\n");
-	}*/
 
 	NORM_PI_PI(deltaAngle);
 
@@ -691,76 +642,6 @@ double getEmulatedGearRatio(double curSpeed) {
 	return selratio;
 }
 
-#if 0
-///* compute fitting acceleration */
-double getaccel(shared_use_st *shared)
-{
-	/*  if ((shared->toStart  > 2760) && (shared->toStart  < 2770)) {
-	return 0.5;
-	}
-	*/
-
-	const double radius = 0.33 / 2.0f + 0.133 * 0.8;
-
-	double allowedspeed = getAllowedSpeedFromCurvature(shared, 0);
-	//printf("allowedspeed = %f km/h speed = %f km/h \n", allowedspeed * (18 / 5), shared->speed* (18 / 5));
-
-	if (allowedspeed > shared->speed + (20 * (18 / 5))) {
-		//          double curvature = pLearn->getLastCurvature();
-
-		return 1.0;
-
-		//          if (curvature < 0.0001) {
-		//return 1.0;
-		//}
-#if 0           
-	else {
-
-		double calcSpeed = sqrt((ASPHALT_FRICTION_CONSTANT*1.5*GRAVITY_CONSTANT) / curvature);
-
-		if (curvature == 0.0)
-			return MAX_SPEED_PER_METER;
-
-		if (isinf(calcSpeed)) {
-			calcSpeed = MAX_SPEED_PER_METER;
-		}
-
-		if (isnan(calcSpeed)) {
-			calcSpeed = MAX_SPEED_PER_METER;
-		}
-
-		double gr = getEmulatedGearRatio(shared->speed);
-		double rm = 850;
-		double accel = calcSpeed / radius*gr / rm;
-		//  printf("cur accel = %f\n", accel);
-		return accel;
-	}
-#endif
-	}
-	else {
-
-		double gr = getEmulatedGearRatio(shared->speed);
-		double rm = 850;
-		double accel = allowedspeed / radius*gr / rm;
-		//  printf("cur accel = %f\n", accel);
-		return accel;
-	}
-
-	return 1.0;
-
-	/*
-	if (allowedspeed * (18 / 5) < 70) {
-	return 0.3f;
-	}
-	*/
-
-	//return getPidAccel(shared, allowedspeed);
-	//return fabs (allowedspeed - shared->speed) / MAX_SPEED_PER_METER;
-	//}
-
-}
-#endif
-
 double getDistToSegEnd(shared_use_st *shared)
 {
 
@@ -777,20 +658,9 @@ double getDistToSegEnd(shared_use_st *shared)
 		return shared->dist_track - shared->toStart;
 
 	return shared->track_forward_dists[0] - shared->toStart;// % shared->dist_track);
-
-
-
-	/*
-	if (car->_trkPos.seg->type == TR_STR) {
-	return car->_trkPos.seg->length - car->_trkPos.toStart;
-	}
-	else {
-	return (car->_trkPos.seg->arc - car->_trkPos.toStart)*car->_trkPos.seg->radius;
-	}
-	*/
+		
 }
 #if 1
-/* compute fitting acceleration */
 
 bool isStucked = false;
 
@@ -851,10 +721,6 @@ double getaccel(shared_use_st *shared)
 			//printf ("ac:%f\n", acc);
 			return acc;
 		}
-		//printf ("ac:1\n");
-		//  if (fabs(1.0 - previousaccel) < 0.1)
-		//return 1.0;
-
 		double curGearmaxSpeed = getCurGearMaxSpeed();
 
 		if ((allowedspeed * (18 / 5)) - curGearmaxSpeed < 0) {
@@ -944,8 +810,8 @@ double filterBColl(shared_use_st *shared, double brake)
 			
 			float brakedist = mass*(currentspeedsqr - allowedspeedsqr) / (2.0*(cm));
 			if (brakedist > opponents[i].getDistance()) {
-				printf("break with i = %d speed = %f tomiddle = %f \n", i, opponents[i].getSpeed(),
-					opponents[i].getToMiddle());
+				printf("break with i = %d speed = %f tomiddle = %f mytomiddle = %f\n", i, opponents[i].getSpeed(),
+					opponents[i].getToMiddle(),shared->toMiddle);
 				return 1.0;
 			}
 		}
@@ -1011,9 +877,7 @@ double getBrake(shared_use_st *shared)
 
 		if (trackIndex > 18)
 			break;
-
-		//if (trackIndex == 2)
-		//printf("");
+			
 		allowedspeed = getAllowedSpeedFromCurvature(shared, trackIndex);
 
 		if (allowedspeed < shared->speed) {
@@ -1147,7 +1011,7 @@ double getTargetPoint(shared_use_st *shared)
 
 #define SIDECOLL_MARGIN  2.0
 
-
+#if 0
 // Steer filter for collision avoidance.
 float filterSColl(shared_use_st *shared, float steer)
 {
@@ -1234,80 +1098,7 @@ float filterSColl(shared_use_st *shared, float steer)
 	}
 	return steer;
 }
-
-#if 0
-/* Steer filter for collision avoidance */
-float filterSColl(shared_use_st *shared,float steer)
-{
-	int i;
-	float sidedist = 0.0, fsidedist = 0.0, minsidedist = FLT_MAX;
-	Opponent *o = NULL;
-
-	/* get the index of the nearest car (o) */
-	for (i = 0; i < 10; i++) {
-		if (opponents[i].getState() & OPP_SIDE) {
-			sidedist = opponents[i].getSideDist();
-			fsidedist = fabs(sidedist);
-			if (fsidedist < minsidedist) {
-				minsidedist = fsidedist;
-				o = &opponents[i];
-			}
-		}
-	}
-
-	/* if there is another car handle the situation */
-	if (o != NULL) {
-		float d = fsidedist - o->getWidth();
-		/* near enough */
-		if (d < SIDECOLL_MARGIN) {
-			/* compute angle between cars */
-			double diffangle = atan2(o->getDistance(), o->getToMiddle());
-			NORM_PI_PI(diffangle);
-			const float c = SIDECOLL_MARGIN / 2.0;
-			d = d - c;
-			if (d < 0.0) d = 0.0;
-			float psteer = diffangle / MYCAR_STEERLOCK;
-			return steer*(d / c) + 2.0*psteer*(1.0 - d / c);
-		}
-	}
-	return steer;
-}
 #endif
-/* Compute an offset to the target point */
-float getOvertakeOffset(shared_use_st *shared)
-{
-	int i;
-	float catchdist, mincatchdist = FLT_MAX;
-	Opponent *o = NULL;
-
-	int index = 0;
-
-	for (i = 0; i < OPPONENT_NUM; i++) {
-		if (opponents[i].getState() & OPP_FRONT) {
-			catchdist = opponents[i].getCatchDist();
-			if (catchdist < mincatchdist) {
-				mincatchdist = catchdist;
-				o = &opponents[i];
-			}
-		}
-	}
-
-	if (o != NULL) {
-		float w = shared->track_width / WIDTHDIV - BORDER_OVERTAKE_MARGIN;
-		float otm = o->getToMiddle();//To middle
-		
-		if (otm > 0.0 && myoffset > -w)
-			myoffset -= OVERTAKE_OFFSET_INC;
-		else if (otm < 0.0 && myoffset < w) 
-			myoffset += OVERTAKE_OFFSET_INC;
-	}
-	else {
-		if (myoffset > OVERTAKE_OFFSET_INC) myoffset -= OVERTAKE_OFFSET_INC;
-		else if (myoffset < -OVERTAKE_OFFSET_INC) myoffset += OVERTAKE_OFFSET_INC;
-		else myoffset = 0.0;
-	}
-	return myoffset;
-}
 
 const float MAX_INC_FACTOR = 5.0f;
 bool overtaking = false;
@@ -1360,11 +1151,22 @@ float getOffset(shared_use_st *shared)
 	float time_to_overtake = OVERTAKE_TIME;
 
 	for (i = 0; i < OPPONENT_NUM; i++) {
+		if ((opponents[i].getState() & OPP_FRONT) || (opponents[i].getState() & OPP_FRONT_FAST))
+		{
+			catchdist = min(opponents[i].getCatchDist(), opponents[i].getDistance()*10.0);
+			if (catchdist < mincatchdist) {
+				mincatchdist = catchdist;
+				o = &opponents[i];
+			}
+		}
+	}
+#if 0
+	for (i = 0; i < OPPONENT_NUM; i++) {
 		if (opponents[i].getState() & OPP_FRONT) {
 			catchdist = opponents[i].getCatchDist();//MIN(opponent[i].getCatchDist(), opponent[i].getDistance()*CATCH_FACTOR);
 			if (shared->speed > 0) {
 				time_to_overtake = catchdist / shared->speed;
-
+				
 				if (time_to_overtake < OVERTAKE_TIME) {
 					// consider overtaking if we approach in OVERTAKE_TIME
 					//printf ("t_overtake: %f\n", time_to_overtake);
@@ -1374,21 +1176,11 @@ float getOffset(shared_use_st *shared)
 					}
 
 				}
-#if 0
-				else if (opponents[i].getBrakeOvertake()>0.1f) {
-					// or if we recently were about to crash
-					//printf ("b_overtake: %f\n", opponent[i].getBrakeOvertake());
-					catchdist = opponent[i].getDistance();
-					if (catchdist < mincatchdist) {
-						mincatchdist = catchdist;
-						o = &opponent[i];
-					}
-				}
-#endif
+
 			}
 		}
 	}
-
+#endif
 	if (o != NULL) {
 		overtaking = true;
 		// Compute the width around the middle which we can use for overtaking.
@@ -1405,9 +1197,7 @@ float getOffset(shared_use_st *shared)
 			incfactor *= 2.0f;
 		}
 
-		if (fabs(otm) > fabs(shared->toMiddle) + MYCAR_DIMENSION_Y + BORDER_OVERTAKE_MARGIN){
-			
-		}else if (otm > wm && myoffset > -w) {
+		if (otm > wm && myoffset > -w) {
 			myoffset -= OVERTAKE_OFFSET_INC*incfactor;
 		}
 		else if (otm < -wm && myoffset < w) {
@@ -1468,7 +1258,7 @@ float getOffset(shared_use_st *shared)
 					curvature = getAllowedCurvature(shared, index);
 					index++;
 
-					if (index < 18){
+					if (index > 18){
 						break;
 					}
 				}
@@ -1496,23 +1286,24 @@ float getOffset(shared_use_st *shared)
 		}
 	}
 	else {
+	
 		// There is no opponent to overtake, so the offset goes slowly back to zero.
 
 		float a = 1.0;
 
-		if (fabs(myoffset) < DBL_EPSILON)
-			return myoffset;
+//		if (fabs(myoffset) < DBL_EPSILON)
+//			return myoffset;
 
 		if (myoffset > a*OVERTAKE_OFFSET_INC) {
-			myoffset -= a*OVERTAKE_OFFSET_INC / 3;
+			myoffset -= a*OVERTAKE_OFFSET_INC ;
 			//myoffset= 0.0;
 
-			printf("return to previous pos myoffset -=\n");
+			printf("return to previous pos myoffset -= %f\n", myoffset);
 		}
 		else if (myoffset < -a*OVERTAKE_OFFSET_INC) {
-			myoffset += a*OVERTAKE_OFFSET_INC / 3;
+			myoffset += a*OVERTAKE_OFFSET_INC;
 			//myoffset= 0.0;
-			printf("return to previous pos myoffset  += \n");
+			printf("return to previous pos myoffset  += %f\n", myoffset);
 		}
 		else {
 			printf("myoffset = 0.0\n");
@@ -1523,8 +1314,6 @@ float getOffset(shared_use_st *shared)
 	return myoffset;
 }
 
-
-
 // Compute the needed distance to brake.
 double brakedist(shared_use_st *shared,float allowedspeed, float mu)
 {
@@ -1533,46 +1322,6 @@ double brakedist(shared_use_st *shared,float allowedspeed, float mu)
 	return (v1sqr - v2sqr) / (2.0*mu*GRAVITY_CONSTANT);
 }
 
-
-
-double getSteer(shared_use_st *shared)
-{
-
-
-#if 0
-	double targetAngle = getTargetPoint(shared);
-
-	printf("targetAngle = %f\n", targetAngle);
-	targetAngle -= shared->track_current_angle - shared->angle;
-	printf("shared->track_current_angle + shared->angle = %f\n", shared->track_current_angle + shared->angle);
-	NORM_PI_PI(targetAngle);
-
-	targetAngle -= 1.0*(shared->toMiddle) / shared->track_width;
-
-	if (direction < 0)
-		targetAngle -= 1.0*(shared->toMiddle + 5) / (shared->track_width);
-	else
-		targetAngle -= 1.0*(shared->toMiddle - 5) / (shared->track_width);
-#endif
-	/*  if (targetAngle < 0)
-	targetAngle -= 1.0*(-shared->toMiddle/2) / shared->track_width;
-	else if (targetAngle > 0)
-	targetAngle -= 1.0*(shared->toMiddle/2) / shared->track_width;
-	*/
-
-	double targetAngle = shared->angle;
-
-	targetAngle -= 1.0*(shared->toMiddle + 2) / shared->track_width;
-
-	NORM_PI_PI(targetAngle);
-
-	//printf("targetAngle = %f\n", targetAngle);
-	double steer = targetAngle / MYCAR_STEERLOCK;
-
-	//printf("steer = %f\n", steer);
-
-	return steer;
-}
 
 int isAlone()
 {
@@ -1587,6 +1336,11 @@ int isAlone()
 
 int controlDriving(shared_use_st *shared){
 	if (shared == NULL) return -1;
+
+	clock_t current = clock();        // 시간설정
+
+	Timediff = (current - previusTime) / (double)CLOCKS_PER_SEC;
+	previusTime = current;
 
 	//Input : shared_user_st
 	const double SC = 1.0;
@@ -1676,23 +1430,14 @@ int controlDriving(shared_use_st *shared){
 		trytoOut = false;
 		diff_angle = shared->angle;
 		//TO-DO : 알고리즘을 작성하세요.
-		double offset = getOffset(shared);// getOvertakeOffset(shared);
+		double offset = getOffset(shared);
 
-				//printf("shared->toMiddle %f \n", shared->toMiddle);
+		diff_angle -= (SC*shared->toMiddle + offset) / shared->track_width;
+		NORM_PI_PI(diff_angle);
 
-//		if (isAlone()){
-			diff_angle -= (SC*shared->toMiddle + offset) / shared->track_width;
-			NORM_PI_PI(diff_angle);
-//		}
-		
-	/*
-		printf("toMiddle = %f\n", shared->toMiddle);
-		printf("track_width = %f\n", shared->track_width);
-		printf("diff_angle = %f\n", RADIANS_TO_DEGREES(diff_angle));
-		*/
 		//Output : 4개의 Output Cmd 값을 도출하세요.
 				
-		shared->steerCmd = diff_angle / MYCAR_STEERLOCK;//filterSColl(shared, diff_angle / MYCAR_STEERLOCK);// getSteer(shared);//diff_angle / MYCAR_STEERLOCK;//
+		shared->steerCmd = diff_angle / MYCAR_STEERLOCK;
 		shared->brakeCmd = filterABS(shared, filterBrakeSpeed(shared, filterBColl(shared, getBrake(shared))));
 	
 		if (shared->brakeCmd == 0.0)
@@ -1743,10 +1488,6 @@ void endShare(struct shared_use_st *&shared, HANDLE &hMap){
 		hMap = NULL;
 	}
 }
-#define LEFT 75
-#define RIGHT 77
-#define UP 72
-#define DOWN 80
 
 
 int main(int argc, char **argv){
