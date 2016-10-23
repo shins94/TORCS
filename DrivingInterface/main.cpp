@@ -579,30 +579,45 @@ double getCurgearRaitio(int getr) {
 	return ratio[gear];
 }
 
+#define GEAR_1_MAX_SPEED	79
+#define GEAR_2_MAX_SPEED	105
+#define GEAR_3_MAX_SPEED	134
+#define GEAR_4_MAX_SPEED	178
+#define GEAR_5_MAX_SPEED	210
+#define GEAR_6_MAX_SPEED	360
+/*
+#define GEAR_1_MAX_SPEED	79
+#define GEAR_2_MAX_SPEED	105
+#define GEAR_3_MAX_SPEED	134
+#define GEAR_4_MAX_SPEED	160
+#define GEAR_5_MAX_SPEED	200
+#define GEAR_6_MAX_SPEED	360
+*/
+
 double getCurGearMaxSpeed() {
 
 	double maxspeed = 0;
 
 	if (gear == 1) {
-		maxspeed = 79;
+		maxspeed = GEAR_1_MAX_SPEED;
 	}
 	if (gear == 2) {
-		maxspeed = 105;
+		maxspeed = GEAR_2_MAX_SPEED;
 	}
 	if (gear = 3) {
 
-		maxspeed = 134;
+		maxspeed = GEAR_3_MAX_SPEED;
 	}
 	if (gear == 4) {
 
-		maxspeed = 178;
+		maxspeed = GEAR_4_MAX_SPEED;
 	}
 	if (gear == 5) {
 
-		maxspeed = 210;
+		maxspeed = GEAR_5_MAX_SPEED;
 	}
 	if (gear == 6) {
-		maxspeed = 360;
+		maxspeed = GEAR_6_MAX_SPEED;
 	}
 	//printf("cur gear = %d\n", gear);
 	return maxspeed;
@@ -613,27 +628,27 @@ double getEmulatedGearRatio(double curSpeed) {
 
 	double selratio = 0;
 
-	if ((curSpeed*(18 / 5)) >= 0 && (curSpeed*(18 / 5)) < 79) {
+	if ((curSpeed*(18 / 5)) >= 0 && (curSpeed*(18 / 5)) < GEAR_1_MAX_SPEED) {
 		selratio = ratio[1];
 		gear = 1;
 	}
-	if ((curSpeed*(18 / 5)) > 79 && (curSpeed*(18 / 5)) < 105) {
+	if ((curSpeed*(18 / 5)) > GEAR_1_MAX_SPEED && (curSpeed*(18 / 5)) < GEAR_2_MAX_SPEED) {
 		selratio = ratio[2];
 		gear = 2;
 	}
-	if ((curSpeed*(18 / 5)) > 105 && (curSpeed*(18 / 5)) < 134) {
+	if ((curSpeed*(18 / 5)) > GEAR_2_MAX_SPEED && (curSpeed*(18 / 5)) < GEAR_3_MAX_SPEED) {
 		selratio = ratio[3];
 		gear = 3;
 	}
-	if ((curSpeed*(18 / 5)) > 134 && (curSpeed*(18 / 5)) < 178) {
+	if ((curSpeed*(18 / 5)) > GEAR_3_MAX_SPEED && (curSpeed*(18 / 5)) < GEAR_4_MAX_SPEED) {
 		selratio = ratio[4];
 		gear = 4;
 	}
-	if ((curSpeed*(18 / 5)) > 178 && (curSpeed*(18 / 5)) < 210) {
+	if ((curSpeed*(18 / 5)) > GEAR_4_MAX_SPEED && (curSpeed*(18 / 5)) < GEAR_5_MAX_SPEED) {
 		selratio = ratio[5];
 		gear = 5;
 	}
-	if ((curSpeed*(18 / 5)) > 210) {
+	if ((curSpeed*(18 / 5)) > GEAR_5_MAX_SPEED) {
 		gear = 6;
 		selratio = ratio[6];
 	}
@@ -720,6 +735,7 @@ double getaccel(shared_use_st *shared)
 			//printf ("ac:%f\n", acc);
 			return acc;
 		}
+
 		double curGearmaxSpeed = getCurGearMaxSpeed();
 
 		if ((allowedspeed * (18 / 5)) - curGearmaxSpeed < 0) {
@@ -746,7 +762,7 @@ double getaccel(shared_use_st *shared)
 				accel = 1;
 			return accel;
 		}
-
+		
 		//  return previousaccel + 0.1;//tanh(delta);
 	}/*
 	 else {
@@ -1009,95 +1025,6 @@ double getTargetPoint(shared_use_st *shared)
 }
 
 #define SIDECOLL_MARGIN  2.0
-
-#if 0
-// Steer filter for collision avoidance.
-float filterSColl(shared_use_st *shared, float steer)
-{
-	int i;
-	float sidedist = 0.0f, fsidedist = 0.0f, minsidedist = FLT_MAX;
-	Opponent *o = NULL;
-
-	// Get the index of the nearest car (o).
-	for (i = 0; i < OPPONENT_NUM; i++) {
-		if (opponents[i].getState() & OPP_SIDE) {
-			sidedist = opponents[i].getSideDist();
-			fsidedist = fabs(sidedist);
-			if (fsidedist < minsidedist) {
-				minsidedist = fsidedist;
-				o = &opponents[i];
-			}
-		}
-	}
-
-	// If there is another car handle the situation.
-	if (o != NULL) {
-		float d = fsidedist - o->getWidth();
-		// Near, so we need to look at it.
-		if (d < SIDECOLL_MARGIN) {
-			/* compute angle between cars */
-			
-			float diffangle = atan2(o->getDistance(), o->getToMiddle());
-			
-			NORM_PI_PI(diffangle);
-			// We are near and heading toward the car.
-			if (diffangle*o->getSideDist() < 0.0f) {
-				const float c = SIDECOLL_MARGIN / 2.0f;
-				d = d - c;
-				if (d < 0.0f) {
-					d = 0.0f;
-				}
-
-				// Steer delta required to drive parallel to the opponent.
-				float psteer = diffangle / MYCAR_STEERLOCK;
-				myoffset = shared->toMiddle;
-
-				// Limit myoffset to suitable limits.
-				float w = shared->track_width / WIDTHDIV - BORDER_OVERTAKE_MARGIN;
-				if (fabs(myoffset) > w) {
-					myoffset = (myoffset > 0.0f) ? w : -w;
-				}
-
-				// On straights the car near to the middle can correct more, in turns the car inside
-				// the turn does (because if you leave the track on the turn "inside" you will skid
-				// back to the track.
-				if (currentCurvature == 0.0) {
-					if (fabs(shared->toMiddle) > fabs(o->getToMiddle())) {
-						// Its me, I do correct not that much.
-						psteer = steer*(d / c) + 1.5f*psteer*(1.0f - d / c);
-					}
-					else {
-						// Its the opponent, so I correct more.
-						psteer = steer*(d / c) + 2.0f*psteer*(1.0f - d / c);
-					}
-				}
-				else {
-					// Who is outside, heavy corrections are less dangerous
-					// if you drive near the middle of the track.
-					float outside = shared->toMiddle - o->getToMiddle();
-					
-					float sign = (currentCurvature > 0) ? 1.0f : -1.0f;
-					
-					if (outside*sign > 0.0f) {
-						psteer = steer*(d / c) + 1.5f*psteer*(1.0f - d / c);
-					}
-					else {
-						psteer = steer*(d / c) + 2.0f*psteer*(1.0f - d / c);
-					}
-				}
-
-				if (psteer*steer > 0.0f && fabs(steer) > fabs(psteer)) {
-					return steer;
-				}
-				else {
-					return psteer;
-				}
-			}
-		}
-	}
-	return steer;
-}
-#endif
 
 const float MAX_INC_FACTOR = 5.0f;
 bool overtaking = false;
