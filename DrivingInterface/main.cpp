@@ -6,7 +6,6 @@
 //#include "pGNUPlot.h"
 #include <time.h>
 #include <Windows.h>
-#include "linalg.h"
 #include "float.h"
 
 #include<iostream>
